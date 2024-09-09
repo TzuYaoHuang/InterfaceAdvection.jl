@@ -2,8 +2,10 @@
 
 """
     getIntercept(v, g)
+    getIntercept(n̂, I, g)
+    getIntercept(v1, v2, v3, g)
 
-Calculate intersection from volume fraction.
+Calculate intercept from volume fraction.
 These functions prepare `n̂` and `g` for `f2α`.
 Following algorithm proposed by [Scardovelli & Zaleski (2000)](https://doi.org/10.1006/jcph.2000.6567).
 """
@@ -27,8 +29,10 @@ end
 
 """
     getVolumeFraction(v, b)
+    getVolumeFraction(n̂, I, b)
+    getVolumeFraction(v1, v2, v3, b)
 
-Calculate intersection from volume fraction.
+Calculate volume fraction from intercept.
 These functions prepare `n̂` and `b` for `α2f`.
 Following algorithm proposed by [Scardovelli & Zaleski (2000)](https://doi.org/10.1006/jcph.2000.6567).
 """

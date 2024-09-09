@@ -2,15 +2,15 @@
 """
     cVOF{D::Int, T::Float, Sf<:AbstractArray{T,D}, Vf<:AbstractArray{T,D+1}}
 
-Composite type for 2D or 3D two-phase conservative Volume-of-Fluid (cVoF) advection scheme.
+Composite type for 2D or 3D two-phase conservative Volume-of-Fluid (cVOF) advection scheme.
 
-The dark fluid is advected using operator-split cVoF method proposed by  [Weymouth & Yue (2010)](https://doi.org/10.1016/j.jcp.2009.12.018).
+The dark fluid is advected using operator-split cVOF method proposed by  [Weymouth & Yue (2010)](https://doi.org/10.1016/j.jcp.2009.12.018).
 This guarentees mass conservation and preserves sharp interface across fluids.
 The primary variable is the volume fraction of the heavy fluid, the cell-averaged color function, `f`. 
 We use Piecewise Linear Interface Calculation (PLIC) to reconstruct sharp interface. 
 The dark fluid is indicated with negative distance.
 """
-struct cVoF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray}
+struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray}
     # field variable
     f  :: Sf  # volume fraction
     f⁰ :: Sf  # volume fraction for RK2 scheme
@@ -24,7 +24,7 @@ struct cVoF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray}
     # domain configuration
     perdir :: NTuple
     dirdir :: NTuple
-    function cVoF(
+    function cVOF(
         N::NTuple{D}; 
         arr=Array, T=Float64, 
         InterfaceSDF::Function=(x)->5-x[1], 
@@ -32,5 +32,10 @@ struct cVoF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray}
         perdir=(), dirdir=()
     ) where D
         # TODO: initialize
+        Ng = N.+2
+        Nv = (Ng...,D)
+        f = ones(T,Ng) |> arr
+        α = zeros(T,Ng) |> arr
+        n̂ = zeros(T,Nv) |> arr
     end
 end
