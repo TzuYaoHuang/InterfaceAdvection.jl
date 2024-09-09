@@ -29,6 +29,16 @@ using Test
 
 end
 
+@testset "VOFutil.jl" begin
+    N = (2,2)
+    f = zeros(N.+2); α = similar(f); n̂ = zeros((N.+2 ...,2))
+    interSDF=(x) -> (-x[1]-3x[2]+4.5)/√10
+    fRef = [0 0 0 0; 0 0 1/24 0; 0 2/3 23/24 0; 0 0 0 0]
+    fRef = [0 0 0 0; 0 0 2/3 0; 0 1/24 23/24 0; 0 0 0 0]
+    applyVOF!(f,α,n̂,interSDF)
+    @test f ≈ fRef
+end
+
 @testset "InterfaceAdvection.jl" begin
     # Write your tests here.
 end

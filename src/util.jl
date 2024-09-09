@@ -1,33 +1,37 @@
-import WaterLily: @loop, inside
-
 """
-    applyVOF!(f,α,n̂,InterfaceSDF)
+    myargmax(vec[,I],n)
 
-Calculate volume fraction, `f`, according to a given signed distance function, `InterfaceSDF`. The dark fluid is indicated with negative distance.
+Return where is the absolute maximum since the original `argmax` function in julia is not working in GPU environment.
 """
-function applyVOF!(f,α,n̂,InterfaceSDF)
-    # set up the field with PLIC Calculation
-    @loop applyVOF!(f,α,n̂,InterfaceSDF,I) over I∈inside(f)
-    # clean wisp: value too close to 0 or 1
-    cleanWisp!(f)
-end
-function applyVOF!(f::AbstractArray{T,D},α::AbstractArray{T,D},n̂::AbstractArray{T,Dv},InterfaceSDF,I) where {T,D,Dv}
-    # forwarddiff cause some problem so using 
-    for i∈1:D
-        xyzpδ = SVector{D,T}(loc(0,I).+0.01 .*δ(i,I).I)
-        xyzmδ = SVector{D,T}(loc(0,I).-0.01 .*δ(i,I).I)
-        n̂[I,i] = FreeSurfsdf(xyzpδ) - FreeSurfsdf(xyzmδ)
+function myargmax(vec)
+    max = abs2(vec[1])
+    iMax = 1
+    for i∈2:length(vec)
+        cur = abs2(vec[i])
+        if cur > max
+            max = cur
+            iMax = i
+        end
     end
-    # TODO: the PLIC estimation
+    return iMax
+end
+function myargmax(vec,I)
+    max = abs2(vec[I,1])
+    iMax = 1
+    for i∈2:size(vec)[end]
+        cur = abs2(vec[I,i])
+        if cur > max
+            max = cur
+            iMax = i
+        end
+    end
+    return iMax
 end
 
 """
-    cleanWisp!(f; tol)
+    boxAroundI(I::CartesianIndex{D})
 
-Clean out values in `f` too close to 0 or 1. The margin is 10 times the resolution of float type `T`.
+Return 3 surrunding cells in each direction of I, including diagonal ones.
+The return grid number adds up to 3ᴰ 
 """
-function cleanWisp!(f::AbstractArray{T,D}; tol=10eps(T)) where {T,D}
-    @loop f[I] = ifelse(f[I]<       tol, T(0), f[I]) over I∈inside(f)
-    @loop f[I] = ifelse(f[I]>one(T)-tol, T(1), f[I]) over I∈inside(f)
-end
-
+boxAroundI(I::CartesianIndex{D}) where D = (I-oneunit(I)):(I+oneunit(I))
