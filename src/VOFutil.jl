@@ -69,4 +69,7 @@ end
 
 containInterface(f,I) = containInterface(f[I])
 containInterface(f) = 0<f<1
+fullorempty(fc) = (fc==0.0 || fc==1.0)
+
+get3CellHeight(f,I,summingDir) = f[I]+f[I-δ(summingDir,I)]+f[I+δ(summingDir,I)]
 

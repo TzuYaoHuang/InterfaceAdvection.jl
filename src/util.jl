@@ -1,9 +1,9 @@
 """
-    myargmax(vec[,I],n)
+    myArgAbsMax(vec[,I],n)
 
 Return where is the absolute maximum since the original `argmax` function in julia is not working in GPU environment.
 """
-function myargmax(vec)
+function myArgAbsMax(vec)
     max = abs2(vec[1])
     iMax = 1
     for i∈2:length(vec)
@@ -15,7 +15,7 @@ function myargmax(vec)
     end
     return iMax
 end
-function myargmax(vec,I)
+function myArgAbsMax(vec,I)
     max = abs2(vec[I,1])
     iMax = 1
     for i∈2:size(vec)[end]
