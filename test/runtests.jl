@@ -33,10 +33,19 @@ end
     N = (2,2)
     f = zeros(N.+2); α = similar(f); n̂ = zeros((N.+2 ...,2))
     interSDF=(x) -> (-x[1]-3x[2]+4.5)/√10
-    fRef = [0 0 0 0; 0 0 1/24 0; 0 2/3 23/24 0; 0 0 0 0]
     fRef = [0 0 0 0; 0 0 2/3 0; 0 1/24 23/24 0; 0 0 0 0]
     applyVOF!(f,α,n̂,interSDF)
     @test f ≈ fRef
+end
+
+@testset "normalEstimation.jl" begin
+    f = [5/12 1 2/3; 1/4 11/12 1/12; 1/12 1/3 0]
+    n̂ = zeros(3,3,2)
+    getInterfaceNormal_WY!(f,n̂,CartesianIndex(2,2))
+    @test n̂[2,2,1] ≈ 1.; @test n̂[2,2,2]+0.5 ≈ 0.5
+    f .= [0 1/3 1; 1/12 11/12 1; 1 1 1]
+    getInterfaceNormal_WY!(f,n̂,CartesianIndex(2,2))
+    @test n̂[2,2,1] ≈ -2/3; @test n̂[2,2,2] ≈ -1.
 end
 
 @testset "InterfaceAdvection.jl" begin
