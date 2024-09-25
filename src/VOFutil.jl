@@ -30,7 +30,7 @@ function applyVOF!(f::AbstractArray{T,D},α::AbstractArray{T,D},n̂::AbstractArr
 end
 
 """
-    BCVOF!(f,α,n̂)
+    BCVOF!(f,α,n̂;perdir)
 
 Apply boundary condition to volume fraction, intercept, and normal with Neumann or Periodic ways
 """
