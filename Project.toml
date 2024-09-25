@@ -4,6 +4,7 @@ authors = ["Tzu-Yao Huang <tzuyao.jason.huang@gmail.com> and contributors"]
 version = "1.0.0-DEV"
 
 [deps]
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WaterLily = "ed894a53-35f9-47f1-b17f-85db9237eebd"
