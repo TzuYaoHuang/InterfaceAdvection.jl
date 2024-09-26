@@ -29,7 +29,7 @@ function myArgAbsMax(vec,I)
 end
 
 """
-    boxAroundI(I::CartesianIndex{D})
+    boxAroundI(I)
 
 Return 3 surrunding cells in each direction of `I`, including diagonal ones.
 The return grid number adds up to 3ᴰ 
