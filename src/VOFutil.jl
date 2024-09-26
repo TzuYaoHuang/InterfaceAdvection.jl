@@ -1,4 +1,4 @@
-import WaterLily: @loop, inside, loc, CIj, slice
+import WaterLily: @loop, inside, loc, CIj, slice, size_u
 using StaticArrays
 
 """
@@ -41,7 +41,7 @@ function BCVOF!(f,α,n̂;perdir=())
             # TODO: can we merge f,α,n̂ together?
             @loop f[I] = f[CIj(j,I,N[j]-1)] over I ∈ slice(N,1,j)
             @loop f[I] = f[CIj(j,I,2)] over I ∈ slice(N,N[j],j)
-            for i ∈ 1:n
+            for i ∈ 1:D
                 @loop n̂[I,i] = n̂[CIj(j,I,N[j]-1),i] over I ∈ slice(N,1,j)
                 @loop n̂[I,i] = n̂[CIj(j,I,2),i] over I ∈ slice(N,N[j],j)
             end
@@ -62,7 +62,7 @@ end
 
 Clean out values in `f` too close to 0 or 1. The margin is 10 times the resolution of float type `T`.
 """
-function cleanWisp!(f::AbstractArray{T,D}; tol=10eps(T)) where {T,D}
+function cleanWisp!(f::AbstractArray{T,D}, tol=10eps(T)) where {T,D}
     @loop f[I] = ifelse(f[I]<       tol, T(0), f[I]) over I∈inside(f)
     @loop f[I] = ifelse(f[I]>one(T)-tol, T(1), f[I]) over I∈inside(f)
 end

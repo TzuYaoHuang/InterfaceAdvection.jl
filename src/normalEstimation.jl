@@ -9,10 +9,10 @@ function reconstructInterface!(f,α,n̂;perdir=())
     @loop reconstructInterface!(f,α,n̂,I) over I∈inside(f)
     BCVOF!(f,α,n̂;perdir)
 end
-function reconstructInterface!(f,α,n̂,I)
+function reconstructInterface!(f::AbstractArray{T,D},α,n̂,I) where {T,D}
     # guarding if to role out non-interface cell
     if fullorempty(f[I])
-        for i∈1:n n̂[I,i] = 0 end
+        for i∈1:D n̂[I,i] = 0 end
         α[I] = 0
         return nothing
     end
@@ -21,7 +21,8 @@ function reconstructInterface!(f,α,n̂,I)
     getInterfaceNormal_WY!(f,n̂,I)
 
     # get intercept
-    α[I] = getIntercept(n̂,I,fc)
+    α[I] = getIntercept(n̂,I,f[I])
+    return nothing
 end
 
 """
@@ -35,6 +36,7 @@ function getInterfaceNormal_WY!(f::AbstractArray{T,D},n̂,I) where {T,D}
 
     # Get guessed dominant direction
     dominantDir = myArgAbsMax(n̂,I)
+    
     for d∈1:D
         if d==dominantDir
             n̂[I,d] = sign(n̂[I,d])
