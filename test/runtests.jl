@@ -48,6 +48,25 @@ end
     @test n̂[2,2,1] ≈ -2/3; @test n̂[2,2,2] ≈ -1.
 end
 
+@testset "advection.jl" begin
+    Ng = (3,3); Nv = (Ng...,2);
+    Ic = CartesianIndex(2,2)
+    f = zeros(Ng); f[Ic] = 0.32
+    α = zeros(Ng); α[Ic] = -0.2
+    n̂ = zeros(Nv); n̂[Ic,:] .= [1,-1]
+    fᶠ= zeros(Ng)
+    d = 1
+    getVOFFlux!(fᶠ,f,α,n̂,-0.4,d,Ic)
+    getVOFFlux!(fᶠ,f,α,n̂,0.4,d,Ic+δ(d,Ic))
+    @test fᶠ[Ic] ≈ -0.24
+    @test fᶠ[Ic+δ(d,Ic)] ≈ 0.02
+    d = 2
+    getVOFFlux!(fᶠ,f,α,n̂,-0.4,d,Ic)
+    getVOFFlux!(fᶠ,f,α,n̂,0.4,d,Ic+δ(d,Ic))
+    @test fᶠ[Ic] ≈ -0.02
+    @test fᶠ[Ic+δ(d,Ic)] ≈ 0.24
+end
+
 @testset "InterfaceAdvection.jl" begin
     # Write your tests here.
 end

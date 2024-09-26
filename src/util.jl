@@ -35,3 +35,7 @@ Return 3 surrunding cells in each direction of I, including diagonal ones.
 The return grid number adds up to 3ᴰ 
 """
 boxAroundI(I::CartesianIndex{D}) where D = (I-oneunit(I)):(I+oneunit(I))
+
+function inside_uWB(dims::NTuple{D},j) where {D}
+    CartesianIndices(ntuple( i-> i==j ? (2:dims[i]) : (2:dims[i]-1), D))
+end
