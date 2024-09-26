@@ -36,6 +36,12 @@ The return grid number adds up to 3ᴰ
 """
 boxAroundI(I::CartesianIndex{D}) where D = (I-oneunit(I)):(I+oneunit(I))
 
+"""
+    inside_uWB(dims,j)
+
+Return CartesianIndices range including the ghost-cells on the boundaries of
+a _vector_ array on face `j` with size `dims`. (WB stands for with boundaries.)
+"""
 function inside_uWB(dims::NTuple{D},j) where {D}
     CartesianIndices(ntuple( i-> i==j ? (2:dims[i]) : (2:dims[i]-1), D))
 end

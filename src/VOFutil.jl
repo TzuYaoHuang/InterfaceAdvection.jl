@@ -54,9 +54,6 @@ function BCVOF!(f,α,n̂;perdir=())
     end
 end
 
-
-
-
 """
     cleanWisp!(f; tol)
 
@@ -67,9 +64,25 @@ function cleanWisp!(f::AbstractArray{T,D}, tol=10eps(T)) where {T,D}
     @loop f[I] = ifelse(f[I]>one(T)-tol, T(1), f[I]) over I∈inside(f)
 end
 
-containInterface(f,I) = containInterface(f[I])
+
+"""
+    containInterface(f)
+
+Check whether `f` is interface cell.
+"""
 containInterface(f) = 0<f<1
+
+"""
+    fullorempty(fc)
+
+Check whether `fc` is full of dark or light fluid.
+"""
 fullorempty(fc) = (fc==0.0 || fc==1.0)
 
+"""
+    get3CellHeight(f,I,summingDir)
+
+Get three cell volume summation around index `I` along direction `summingDir`.
+"""
 get3CellHeight(f,I,summingDir) = f[I]+f[I-δ(summingDir,I)]+f[I+δ(summingDir,I)]
 

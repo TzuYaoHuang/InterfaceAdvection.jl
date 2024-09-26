@@ -3,10 +3,24 @@ using Printf
 import Random: shuffle
 
 
+"""
+    advect!(a,c,f,u¹,u²)
 
+This is the spirit of the operator-split cVOF calculation.
+It calculates the volume fraction after one fluxing.
+Volume fraction field `f` is being fluxed with the averaged of two velocity -- `u¹` and `u²`.
+"""
 advect!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u) where {D} = advectVOF!(
     f,c.fᶠ,c.α,c.n̂,u¹,u²,a.Δt[end],c.c̄; perdir=a.perdir
 )
+
+"""
+    advectVOF!(f,fᶠ,α,n̂,u,u⁰,δt,c̄; perdir)
+
+This is the expanded function for `advect!`. 
+`fᶠ` is where to store face flux in one direction.
+`c̄` is used to take care (de-)activation of dilation term.
+"""
 function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄; perdir=()) where {T,D}
     tol = 10eps(eltype(f))
 
@@ -27,6 +41,21 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄; perdir=())
     end
 end
 
+"""
+    getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d)
+    getVOFFlux!(fᶠ,f,α,n̂,δl,d,IFace)
+
+Get the face flux according to upwind donor-acceptor cell concept. 
+The reconstructed dark fluid volume orverlapped with the advection sweep volume is advected to the next cell. 
+- `fᶠ`: where the flux is stored
+- `f`: volume fraction field
+- `α`: intercept
+- `n̂`: interface normal
+- `u`, `u⁰`: the VOF is fluxed with the average of two velocity
+- `δt`: time step size
+- `δl`: advection sweep length, essentially `uδt`
+- `d`: the direction of cell faces that flux is calculated at
+"""
 function getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d)
     fᶠ .= 0
     @loop getVOFFlux!(fᶠ,f,α,n̂,0.5δt*(u[IFace,d]+u⁰[IFace,d]),d,IFace) over IFace∈inside_uWB(size(f),d)
@@ -57,6 +86,12 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace) where {T,D}
     return nothing
 end
 
+"""
+reportFillError(f,u,u⁰,d,tol)
+
+Report whenever `f` contains overfill or underfill elements with tolerence of `tol`.
+Meanwhile the divergence of `u` and `u⁰` is displayed.
+"""
 function reportFillError(f,u,u⁰,d,tol)
     maxf, maxid = findmax(f)
     minf, minid = findmin(f)

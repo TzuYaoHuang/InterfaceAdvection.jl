@@ -2,8 +2,9 @@ import WaterLily: @loop, inside,δ
 
 """
     reconstructInterface!(f,α,n̂)
+    reconstructInterface!(f,α,n̂,I)
 
-Reconstruct interface from volume fraction field, involving normal calculation and then the intercept.
+Reconstruct interface from volume fraction field (`f`), involving normal calculation (`n̂`) and then the intercept (`α`).
 """
 function reconstructInterface!(f,α,n̂;perdir=())
     @loop reconstructInterface!(f,α,n̂,I) over I∈inside(f)

@@ -22,6 +22,39 @@ include("surfaceTension.jl")
 
 include("flow.jl")
 
+
+"""
+    TwoPhaseSimulation(dims::NTuple{N}, u_BC, L::Number;
+                        Δt=0.25, ν=0., g=nothing, U=nothing, ϵ=1, perdir=(),
+                        λμ=1e-2,λρ=1e-3,η=0,
+                        InterfaceSDF::Function=(x) -> -5-x[1],
+                        uλ=nothing, exitBC=false, body::AbstractBody=NoBody(),
+                        T=Float32, mem=Array)
+
+Constructor for a WaterLily.jl two phase simulation, which is identical to the original on with some additional properties for multiphase flow:
+
+  - `dims`: Simulation domain dimensions.
+  - `u_BC`: Simulation domain velocity boundary conditions, either a
+            tuple `u_BC[i]=uᵢ, i=eachindex(dims)`, or a time-varying function `f(i,t)`
+  - `L`: Simulation length scale.
+  - `U`: Simulation velocity scale.
+  - `Δt`: Initial time step.
+  - `ν`: Scaled kinemetic viscosity (`Re=UL/ν`).
+  - `g`: Domain acceleration, `g(i,t)=duᵢ/dt`
+  - `ϵ`: BDIM kernel width.
+  - `perdir`: Domain periodic boundary condition in the `(i,)` direction.
+  - `exitBC`: Convective exit boundary condition in the `i=1` direction.
+  - `uλ`: Function to generate the initial velocity field.
+  - `λμ`: Ratio of dynamic viscosity, light/dark
+  - `λρ`: Ratio of density, light/dark
+  - `η`: Surface surfaceTension
+  - `InterfaceSDF`: Signed distance function for interface, where dark fluid is indicated by the negative distance.
+  - `body`: Immersed geometry.
+  - `T`: Array element type.
+  - `mem`: memory location. `Array`, `CuArray`, `ROCm` to run on CPU, NVIDIA, or AMD devices, respectively.
+
+See files in `examples` folder for examples.
+"""
 mutable struct TwoPhaseSimulation
     U :: Number # velocity scale
     L :: Number # length scale
