@@ -1,5 +1,5 @@
 """
-    myArgAbsMax(vec[,I],n)
+    myArgAbsMax(vec[,I])
 
 Return where is the absolute maximum since the original `argmax` function in julia is not working in GPU environment.
 """
@@ -29,9 +29,9 @@ function myArgAbsMax(vec,I)
 end
 
 """
-    boxAroundI(I::CartesianIndex{D})
+    boxAroundI(I)
 
-Return 3 surrunding cells in each direction of I, including diagonal ones.
+Return 3 surrunding cells in each direction of `I`, including diagonal ones.
 The return grid number adds up to 3ᴰ 
 """
 boxAroundI(I::CartesianIndex{D}) where D = (I-oneunit(I)):(I+oneunit(I))
