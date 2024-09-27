@@ -1,5 +1,4 @@
 
-
 """
     getIntercept(v, g)
     getIntercept(n̂, I, g)

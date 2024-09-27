@@ -1,4 +1,3 @@
-import WaterLily: Flow,δ,@loop,div,inside,∂,inside_u
 using Printf
 import Random: shuffle
 

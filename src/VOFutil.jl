@@ -1,4 +1,3 @@
-import WaterLily: @loop, inside, loc, CIj, slice, size_u
 using StaticArrays
 
 """
