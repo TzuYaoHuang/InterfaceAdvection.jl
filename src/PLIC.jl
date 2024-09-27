@@ -101,7 +101,7 @@ function f2α(m1, m2, m3, v)
     )
 
     if v < v1
-        return (p*v)^(1.0/3.0)
+        return cbrt(p*v)
     elseif v < v2
         return 0.5*(m1 + sqrt(m1^2 + 8.0*m2*m3*(v - v1)))
     elseif v < v3
