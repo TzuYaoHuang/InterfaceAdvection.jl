@@ -10,7 +10,7 @@ It calculates the volume fraction after one fluxing.
 Volume fraction field `f` is being fluxed with the averaged of two velocity -- `u¹` and `u²`.
 """
 advect!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u) where {D} = advectVOF!(
-    f,c.fᶠ,c.α,c.n̂,u¹,u²,a.Δt[end],c.c̄; perdir=a.perdir
+    f,c.fᶠ,c.α,c.n̂,u¹,u²,a.Δt[end],c.c̄, c.ρuf,c.λρ; perdir=a.perdir
 )
 
 """
@@ -20,7 +20,7 @@ This is the expanded function for `advect!`.
 `fᶠ` is where to store face flux in one direction.
 `c̄` is used to take care (de-)activation of dilation term.
 """
-function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄; perdir=()) where {T,D}
+function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄, ρuf,λρ; perdir=()) where {T,D}
     tol = 10eps(eltype(f))
 
     # get for dilation term
@@ -30,7 +30,7 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄; perdir=())
     for d∈shuffle(1:D)
         # advect VOF field in d direction
         reconstructInterface!(f,α,n̂;perdir)
-        getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d)
+        getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d, ρuf,λρ)
         @loop f[I] += fᶠ[I]-fᶠ[I+δ(d,I)] + c̄[I]*(∂(d,I,u)+∂(d,I,u⁰))*0.5δt over I∈inside(f)
 
         reportFillError(f,u,u⁰,d,tol)
@@ -55,13 +55,15 @@ The reconstructed dark fluid volume orverlapped with the advection sweep volume 
 - `δl`: advection sweep length, essentially `uδt`
 - `d`: the direction of cell faces that flux is calculated at
 """
-function getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d)
+function getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d, ρuf,λρ)
     fᶠ .= 0
-    @loop getVOFFlux!(fᶠ,f,α,n̂,0.5δt*(u[IFace,d]+u⁰[IFace,d]),d,IFace) over IFace∈inside_uWB(size(f),d)
+    @loop getVOFFlux!(fᶠ,f,α,n̂,0.5δt*(u[IFace,d]+u⁰[IFace,d]),d,IFace, ρuf,λρ) over IFace∈inside_uWB(size(f),d)
+    ρuf ./= δt # make it a real flux
 end
-function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace) where {T,D}
+function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace, ρuf,λρ) where {T,D}
     # if face velocity is zero
     if δl == 0
+        ρuf[IFace,d] = 0
         return nothing
     end
 
@@ -73,6 +75,7 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace) where {T,D}
     for ii∈1:D sumAbsNhat+= abs(n̂[ICell,ii]) end
     if sumAbsNhat==0.0 || fullorempty(f[ICell])
         fᶠ[IFace] = f[ICell]*δl
+        ρuf[IFace,d] = fᶠ2ρuf(IFace,fᶠ,δl,λρ)
         return nothing
     end
 
@@ -81,6 +84,7 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace) where {T,D}
     n̂dOrig = n̂[ICell,d]
     n̂[ICell,d] *= abs(δl)
     fᶠ[IFace] = getVolumeFraction(n̂, ICell, a)*δl
+    ρuf[IFace,d] = fᶠ2ρuf(IFace,fᶠ,δl,λρ)
     n̂[ICell,d] = n̂dOrig
     return nothing
 end
