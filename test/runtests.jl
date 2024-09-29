@@ -54,17 +54,38 @@ end
     f = zeros(Ng); f[Ic] = 0.32
     α = zeros(Ng); α[Ic] = -0.2
     n̂ = zeros(Nv); n̂[Ic,:] .= [1,-1]
+    ρuf = zeros(Nv); λρ = 0.1
     fᶠ= zeros(Ng)
     d = 1
-    getVOFFlux!(fᶠ,f,α,n̂,-0.4,d,Ic)
-    getVOFFlux!(fᶠ,f,α,n̂,0.4,d,Ic+δ(d,Ic))
+    getVOFFlux!(fᶠ,f,α,n̂,-0.4,d,Ic,ρuf,λρ)
+    getVOFFlux!(fᶠ,f,α,n̂,0.4,d,Ic+δ(d,Ic),ρuf,λρ)
     @test fᶠ[Ic] ≈ -0.24
     @test fᶠ[Ic+δ(d,Ic)] ≈ 0.02
+    @test ρuf[Ic,d] ≈ -0.256
+    @test ρuf[Ic+δ(d,Ic),d] ≈ 0.058
     d = 2
-    getVOFFlux!(fᶠ,f,α,n̂,-0.4,d,Ic)
-    getVOFFlux!(fᶠ,f,α,n̂,0.4,d,Ic+δ(d,Ic))
+    getVOFFlux!(fᶠ,f,α,n̂,-0.4,d,Ic,ρuf,λρ)
+    getVOFFlux!(fᶠ,f,α,n̂,0.4,d,Ic+δ(d,Ic),ρuf,λρ)
     @test fᶠ[Ic] ≈ -0.02
     @test fᶠ[Ic+δ(d,Ic)] ≈ 0.24
+    @test ρuf[Ic,d] ≈ -0.058
+    @test ρuf[Ic+δ(d,Ic),d] ≈ 0.256
+end
+
+@testset "VOFutil.jl" begin
+    import InterfaceAdvection: get3CellHeight,getρ,getμ
+    Ng = (3,3)
+    Ic = CartesianIndex(2,2)
+    Iur= CartesianIndex(Ng)
+    f = zeros(Ng); f[Ic] = 0.32; f[Ic+δ(2,Ic)] = 0.64
+
+    @test containInterface(f[Ic])
+    @test get3CellHeight(f,Ic,2) ≈ 0.96
+    @test getρ(Ic,f,0.7) ≈ 0.796
+    @test getρ(2,Ic,f,0.7) ≈ 0.748
+    @test getμ(1,1,Iur,f,0.1,0.2) ≈ 0.1352
+    @test getμ(1,2,Iur,f,0.1,0.2) == getμ(2,1,Iur,f,0.1,0.2) ≈ 0.0632
+    # TODO: BCVOF!
 end
 
 @testset "InterfaceAdvection.jl" begin

@@ -2,7 +2,7 @@ module InterfaceAdvection
 
 # some necessary function from WaterLily
 using WaterLily
-import WaterLily: @loop,div,inside,∂,inside_u,CIj,slice,size_u
+import WaterLily: @loop,div,inside,∂,inside_u,CIj,slice,size_u,ϕ
 
 include("util.jl")
 

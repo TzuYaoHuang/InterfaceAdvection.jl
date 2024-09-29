@@ -11,7 +11,7 @@ function applyVOF!(f,α,n̂,InterfaceSDF)
     # clean wisp: value too close to 0 or 1
     cleanWisp!(f)
 end
-function applyVOF!(f::AbstractArray{T,D},α::AbstractArray{T,D},n̂::AbstractArray{T,Dv},InterfaceSDF,I) where {T,D,Dv}
+@inline function applyVOF!(f::AbstractArray{T,D},α::AbstractArray{T,D},n̂::AbstractArray{T,Dv},InterfaceSDF,I) where {T,D,Dv}
     # forwarddiff cause some problem so using finite diff
     δd = 0.01
     for i∈1:D
@@ -69,19 +69,46 @@ end
 
 Check whether `f` is interface cell.
 """
-containInterface(f) = 0<f<1
+@inline containInterface(f) = 0<f<1
 
 """
     fullorempty(fc)
 
 Check whether `fc` is full of dark or light fluid.
 """
-fullorempty(fc) = (fc==0.0 || fc==1.0)
+@inline fullorempty(fc) = (fc==0.0 || fc==1.0)
 
 """
     get3CellHeight(f,I,summingDir)
 
 Get three cell volume summation around index `I` along direction `summingDir`.
 """
-get3CellHeight(f,I,summingDir) = f[I]+f[I-δ(summingDir,I)]+f[I+δ(summingDir,I)]
+@inline @fastmath get3CellHeight(f,I,summingDir) = f[I]+f[I-δ(summingDir,I)]+f[I+δ(summingDir,I)]
 
+@inline @fastmath getρ(I,f,λρ) = λρ + (1-λρ)*f[I]
+@inline @fastmath getρ(d,I,f,λρ) = λρ + (1-λρ)*ϕ(d,I,f)
+
+ρu2u!(u,ρu,f,λρ) = @loop ρu2u!(u,ρu,f,λρ,I) over I∈inside(f)
+@inline @fastmath ρu2u!(u,ρu,f::AbstractArray{T,D},λρ,I) where {T,D} = for d∈1:D
+    u[I,d] = ρu[I,d]/getρ(d,I,f,λρ)
+end
+
+u2ρu!(ρu,u,f,λρ) = @loop u2ρu!(ρu,u,f,λρ,I) over I∈inside(f)
+@inline @fastmath u2ρu!(ρu,u,f::AbstractArray{T,D},λρ,I) where {T,D} = for d∈1:D
+    u[I,d] = ρu[I,d]*getρ(d,I,f,λρ)
+end
+
+@inline @fastmath fᶠ2ρuf(I,fᶠ,δl,λρ) = δl*λρ + (1-λρ)*fᶠ[I]
+
+# TODO: Perhaps using overload to avoid if branch?
+@inline @fastmath function getμ(i,j,I,f::AbstractArray{T,D},λμ,μ) where {T,D}
+    if i==j
+        return μ*(f[I-δ(i,I)]*(1-λμ)+λμ)
+    end
+    s = zero(T)
+    for II∈(I-δ(i,I)-δ(j,I)):I
+        s+= f[II]
+    end
+    s/=4
+    return μ*(s*(1-λμ)+λμ)
+end
