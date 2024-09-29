@@ -21,9 +21,11 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
     c̄  :: AbstractArray{Int8} # cell-centered indicator value for dilation term
 
     # TODO: Varable for energy-conserving scheme
+    ρu :: Vf  # momentum
+    ρu⁰:: Vf  # momentum for RK2 scheme
+    ρuf:: Vf  # mass flux from VOF advection
 
     # physical properties
-    ρ  :: T   # store density of dark fluid (use 1 as default)
     μ  :: Union{T,Nothing}   # store dynamcs viscosity of dark fluid (corresponding to ν)
     λρ :: T   # density ratio = light/dark fluid
     λμ :: T   # dynamic viscosity ratio = light/dark fluid
@@ -48,7 +50,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         f = ones(T,Ng) |> arr
         α = zeros(T,Ng) |> arr
         n̂ = zeros(T,Nv) |> arr
-        c̄ = zeros(Int8,Ng)
+        c̄ = zeros(Int8,Ng) |> arr
 
         # Initialize variables
         applyVOF!(f,α,n̂,InterfaceSDF)
@@ -56,13 +58,19 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         f⁰ = copy(f) |> arr
         fᶠ = zeros(T,Ng) |> arr
 
+        # Energy conserving
+        ρu = zeros(T,Nv) |> arr
+        ρu⁰= zeros(T,Nv) |> arr
+        ρuf= zeros(T,Nv) |> arr
+
         # correct η
         ηc = ifelse(η==0,nothing,η)
         μc = ifelse(μ==0,nothing,μ)
 
         new{D,T,typeof(f),typeof(n̂)}(
             f, f⁰, α, n̂, fᶠ, c̄,
-            1, μc, λμ, λρ, ηc,
+            ρu, ρu⁰, ρuf,
+            μc, λμ, λρ, ηc,
             perdir
         )
     end
