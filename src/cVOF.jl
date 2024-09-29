@@ -20,9 +20,8 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
     fᶠ :: Sf  # store VOF flux
     c̄  :: AbstractArray{Int8} # cell-centered indicator value for dilation term
 
-    # TODO: Varable for energy-conserving scheme
+    # Varable for energy-conserving scheme
     ρu :: Vf  # momentum
-    ρu⁰:: Vf  # momentum for RK2 scheme
     ρuf:: Vf  # mass flux from VOF advection
 
     # physical properties
@@ -60,7 +59,6 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
 
         # Energy conserving
         ρu = zeros(T,Nv) |> arr
-        ρu⁰= zeros(T,Nv) |> arr
         ρuf= zeros(T,Nv) |> arr
 
         # correct η
@@ -69,7 +67,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
 
         new{D,T,typeof(f),typeof(n̂)}(
             f, f⁰, α, n̂, fᶠ, c̄,
-            ρu, ρu⁰, ρuf,
+            ρu, ρuf,
             μc, λμ, λρ, ηc,
             perdir
         )

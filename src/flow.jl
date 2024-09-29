@@ -14,7 +14,7 @@ import WaterLily: accelerate!, median, updateL!, update!, project!, BCTuple, sca
     # TODO: fill it
     a.u⁰ .= a.u;
     # TODO: check if BC doable for ρu
-    u2ρu!(c.ρu,u,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir); c.ρu⁰ .= c.ρu
+    u2ρu!(c.ρu,u,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
 
     # predictor u → u'
     U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
@@ -22,18 +22,25 @@ import WaterLily: accelerate!, median, updateL!, update!, project!, BCTuple, sca
     # TODO: include measure
     a.μ₀ .= 1
     MPFForcing!(a.f,a.u⁰,c.ρuf,a.σ,c.f⁰,c.λμ,c.μ;perdir=a.perdir)
-    updateU!(a.Δt[end],(@view a.Δt[1:end-1]),a.f,a.ρu⁰,a.u,c.f⁰,c.λρ,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.Δt[end],(@view a.Δt[1:end-1]),a.f,c.ρu,a.u,c.f,c.λρ,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); update!(b)
     project!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
 
     # corrector u → u¹
+    # recover ρu @ t = n since it is modified for the predictor step
+    u2ρu!(c.ρu,u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir);
     U = BCTuple(a.U,a.Δt,D)
+    @. c.f = (c.f+c.f⁰)/2
     advect!(a,c,c.f⁰,a.u⁰,a.u)
     # TODO: include measure
     a.μ₀ .= 1
     @. a.u = (a.u+a.u⁰)/2
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.λμ,c.μ;perdir=a.perdir)
-    updateU!(a.Δt[end],a.Δt,a.f,a.ρu,a.u,c.f⁰,c.λρ,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    # TODO: think about which volume fraction should be applied for viscous and surface tneion terms
+    # currently i use @. c.f = (c.f+c.f⁰)/2, should be fine for viscous flow but the sharpness of 
+    # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
+    # solver than one should actually use c.f⁰.
+    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.λμ,c.μ;perdir=a.perdir) 
+    updateU!(a.Δt[end],a.Δt,a.f,c.ρu,a.u,c.f⁰,c.λρ,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); update!(b)
     project!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
 

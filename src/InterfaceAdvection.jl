@@ -1,7 +1,7 @@
 module InterfaceAdvection
 
 # some necessary function from WaterLily
-using WaterLily
+using WaterLily,Printf
 import WaterLily: @loop,div,inside,∂,inside_u,CIj,slice,size_u,ϕ
 
 include("util.jl")
@@ -22,8 +22,10 @@ include("advection.jl")
 export advect!,advectVOF!,getVOFFlux!
 
 include("surfaceTension.jl")
+# TODO: SURFACE TENSION!
 
 include("flow.jl")
+export MPFMomStep!
 
 
 """
@@ -85,5 +87,23 @@ mutable struct TwoPhaseSimulation
 end
 
 export TwoPhaseSimulation
+
+# overload for time
+time(sim::TwoPhaseSimulation) = time(sim.flow)
+sim_time(sim::TwoPhaseSimulation) = time(sim)*sim.U/sim.L
+
+# overload for simStep
+# TODO: support BDIM body
+function sim_step!(sim::Simulation,t_end;remeasure=true,max_steps=typemax(Int),verbose=false)
+    steps₀ = length(sim.flow.Δt)
+    while sim_time(sim) < t_end && length(sim.flow.Δt) - steps₀ < max_steps
+        sim_step!(sim; remeasure)
+        verbose && @printf("    tU/L=%10.6f, ΔtU/L=%.10f\n",t*sim.U/sim.L,sim.flow.Δt[end]*sim.U/sim.L);
+    end
+end
+function sim_step!(sim::TwoPhaseSimulation;remeasure=true)
+    remeasure && measure!(sim)
+    MPFMomStep!(sim.flow,sim.pois,sim.inter,sim.body)
+end
 
 end
