@@ -2,7 +2,7 @@ module InterfaceAdvection
 
 # some necessary function from WaterLily
 using WaterLily,Printf
-import WaterLily: @loop,div,inside,∂,inside_u,CIj,slice,size_u,ϕ
+import WaterLily: @loop,div,inside,∂,inside_u,CI,CIj,slice,size_u,ϕ, NoBody
 
 include("util.jl")
 
@@ -26,6 +26,8 @@ include("surfaceTension.jl")
 
 include("flow.jl")
 export MPFMomStep!
+
+include("metrics.jl")
 
 
 """
@@ -73,7 +75,7 @@ mutable struct TwoPhaseSimulation
                         λμ=1e-2,λρ=1e-3,η=0,
                         InterfaceSDF::Function=(x) -> -5-x[1],
                         uλ=nothing, exitBC=false, body::AbstractBody=NoBody(),
-                        T=Float32, mem=Array) where N 
+                        T=Float64, mem=Array) where N 
         @assert !(isa(u_BC,Function) && isa(uλ,Function)) "`u_BC` and `uλ` cannot be both specified as Function"
         @assert !(isnothing(U) && isa(u_BC,Function)) "`U` must be specified if `u_BC` is a Function"
         isa(u_BC,Function) && @assert all(typeof.(ntuple(i->u_BC(i,zero(T)),N)).==T) "`u_BC` is not type stable"
@@ -81,29 +83,32 @@ mutable struct TwoPhaseSimulation
         U = isnothing(U) ? √sum(abs2,u_BC) : U # default if not specified
         flow = Flow(dims,u_BC;uλ,Δt,ν,g,T,f=mem,perdir,exitBC)
         measure!(flow,body;ϵ)
-        intf = cVOF(dims;arr=mem,T,InterfaceSDF,μ=1*ν,λμ,λρ,η,perdir)
-        new(U,L,ϵ,flow,body,MultiLevelPoisson(flow.p,flow.μ₀,flow.σ;perdir),intf)
+        intf = cVOF(dims;arr=mem,T,InterfaceSDF,μ=ν,λμ,λρ,η,perdir)
+        println("μ: $(intf.μ), λρ: $(intf.λρ)")
+        new(U,L,ϵ,flow,body,Poisson(flow.p,flow.μ₀,flow.σ;perdir),intf)
     end
 end
 
 export TwoPhaseSimulation
 
 # overload for time
-time(sim::TwoPhaseSimulation) = time(sim.flow)
+time(sim::TwoPhaseSimulation) = WaterLily.time(sim.flow)
 sim_time(sim::TwoPhaseSimulation) = time(sim)*sim.U/sim.L
 
 # overload for simStep
 # TODO: support BDIM body
-function sim_step!(sim::Simulation,t_end;remeasure=true,max_steps=typemax(Int),verbose=false)
+function sim_step!(sim::TwoPhaseSimulation,t_end;remeasure=false,max_steps=typemax(Int),verbose=false)
     steps₀ = length(sim.flow.Δt)
     while sim_time(sim) < t_end && length(sim.flow.Δt) - steps₀ < max_steps
         sim_step!(sim; remeasure)
-        verbose && @printf("    tU/L=%10.6f, ΔtU/L=%.10f\n",t*sim.U/sim.L,sim.flow.Δt[end]*sim.U/sim.L);
+        verbose && @printf("    tU/L=%10.6f, ΔtU/L=%.10f\n",sim_time(sim),sim.flow.Δt[end]*sim.U/sim.L);
     end
 end
-function sim_step!(sim::TwoPhaseSimulation;remeasure=true)
+function sim_step!(sim::TwoPhaseSimulation;remeasure=false)
     remeasure && measure!(sim)
-    MPFMomStep!(sim.flow,sim.pois,sim.inter,sim.body)
+    MPFMomStep!(sim.flow,sim.pois,sim.intf,sim.body)
 end
+
+export time,sim_time,sim_step!
 
 end

@@ -95,7 +95,7 @@ end
 
 u2ρu!(ρu,u,f,λρ) = @loop u2ρu!(ρu,u,f,λρ,I) over I∈inside(f)
 @inline @fastmath u2ρu!(ρu,u,f::AbstractArray{T,D},λρ,I) where {T,D} = for d∈1:D
-    u[I,d] = ρu[I,d]*getρ(d,I,f,λρ)
+    ρu[I,d] = u[I,d]*getρ(d,I,f,λρ)
 end
 
 @inline @fastmath fᶠ2ρuf(I,fᶠ,δl,λρ) = δl*λρ + (1-λρ)*fᶠ[I]

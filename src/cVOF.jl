@@ -68,7 +68,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         new{D,T,typeof(f),typeof(n̂)}(
             f, f⁰, α, n̂, fᶠ, c̄,
             ρu, ρuf,
-            μc, λμ, λρ, ηc,
+            μc, λρ, λμ, ηc,
             perdir
         )
     end

@@ -58,7 +58,7 @@ The reconstructed dark fluid volume orverlapped with the advection sweep volume 
 function getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d, ρuf,λρ)
     fᶠ .= 0
     @loop getVOFFlux!(fᶠ,f,α,n̂,0.5δt*(u[IFace,d]+u⁰[IFace,d]),d,IFace, ρuf,λρ) over IFace∈inside_uWB(size(f),d)
-    ρuf ./= δt # make it a real flux
+    # 👿🤬 do not FUCKING put `ρuf ./= δt` here or else the second direction will be devided twice and make simulation explode
 end
 function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace, ρuf,λρ) where {T,D}
     # if face velocity is zero
