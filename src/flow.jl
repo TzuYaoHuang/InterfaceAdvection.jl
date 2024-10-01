@@ -94,7 +94,7 @@ function updateU!(dt,forcing,ρu,u,f,λρ,ΔtList,g,U)
     ρu2u!(u,ρu,f,λρ)
     forcing .= 0
     accelerate!(forcing,ΔtList,g,U)
-    @loop u[Ii] += forcing[Ii]*dt over I∈CartesianIndices(u)
+    @loop u[Ii] += forcing[Ii]*dt over Ii∈CartesianIndices(u)
 end
 
 function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
