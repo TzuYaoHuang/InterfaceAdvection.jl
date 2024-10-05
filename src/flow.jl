@@ -106,10 +106,14 @@ end
 
 @fastmath @inline function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=one(T),safetyMargin=T(0.8)) where {D,T}
     timeNow = sum(a.Δt)
-    a.σ .= zero(T); @inside a.σ[I] = flux_out(I,a.u)
+    a.σ .= zero(T)
 
+    # From WaterLily
+    @inside a.σ[I] = flux_out(I,a.u)
+    Δt_Adv = inv(maximum(a.σ)+5a.ν)
+
+    @inside a.σ[I] = maxTotalFlux(I,a.u)
     Δt_cVOF = 0.5/maximum(a.σ)
-    Δt_Adv = Δt_max       # no need CFL criteria since Δt_cVOF is already stricter
     Δt_Grav = isnothing(a.g) ? Δt_max : 1/√sum(i->g(i,timeNow)^2,1:D)
     Δt_Visc = isnothing(c.μ) ? Δt_max : 3/14*1/(c.μ*max(1,c.λμ/c.λρ))
     Δt_SurfT = isnothing(c.η) ? Δt_max : sqrt((1+c.λρ)/(8π*c.η))  # 8 from kelli's code
