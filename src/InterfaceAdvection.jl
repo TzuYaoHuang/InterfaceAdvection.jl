@@ -102,6 +102,7 @@ function sim_step!(sim::TwoPhaseSimulation,t_end;remeasure=false,max_steps=typem
     while sim_time(sim) < t_end && length(sim.flow.Δt) - steps₀ < max_steps
         sim_step!(sim; remeasure)
         verbose && @printf("    tU/L=%10.6f, ΔtU/L=%.10f\n",sim_time(sim),sim.flow.Δt[end]*sim.U/sim.L);
+        flush(stdout)
     end
 end
 function sim_step!(sim::TwoPhaseSimulation;remeasure=false)
