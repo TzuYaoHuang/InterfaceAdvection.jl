@@ -114,7 +114,7 @@ end
 
     @inside a.σ[I] = maxTotalFlux(I,a.u)
     Δt_cVOF = 0.5/maximum(a.σ)
-    Δt_Grav = isnothing(a.g) ? Δt_max : 1/√sum(i->g(i,timeNow)^2,1:D)
+    Δt_Grav = isnothing(a.g) ? Δt_max : 1/√sum(i->a.g(i,timeNow)^2, 1:D)
     Δt_Visc = isnothing(c.μ) ? Δt_max : 3/14*1/(c.μ*max(1,c.λμ/c.λρ))
     Δt_SurfT = isnothing(c.η) ? Δt_max : sqrt((1+c.λρ)/(8π*c.η))  # 8 from kelli's code
 
