@@ -22,7 +22,7 @@ import LinearAlgebra: ⋅
     # TODO: include measure
     a.μ₀ .= 1
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.λμ,c.μ;perdir=a.perdir)
-    updateU!(δt,a.f,c.ρu,a.u,c.f,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
@@ -41,7 +41,7 @@ import LinearAlgebra: ⋅
     # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
     # solver than one should actually use c.f⁰.
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.λμ,c.μ;perdir=a.perdir) 
-    updateU!(δt,a.f,c.ρu,a.u,c.f⁰,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
@@ -89,7 +89,7 @@ lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,::Val{true}) = @loop (
 upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
-function updateU!(dt,forcing,ρu,u,f,λρ,ΔtList,g,U)
+function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U)
     @loop ρu[Ii] += forcing[Ii]*dt over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
     forcing .= 0
