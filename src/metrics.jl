@@ -11,6 +11,14 @@ This function take multiphase into account so as the staggered arragement.
     ((u[I,i]-U[i])^2+(u[I+δ(i,I),i]-U[i])^2)*getρ(I,f,λρ)
 end
 """
+    ρgh(I,g,f,λρ)
+
+Compute potential energy of a cell given gravitational field tuple `g`.
+"""
+ρgh(I::CartesianIndex{D},g,f,λρ) where D = getρ(I,f,λρ)*fsum(D) do i
+    g[i]*loc(0,I)[i]
+end
+"""
     EnsI(I::CartesianIndex,u,U=0)
 
 Compute ``½α∥𝛚∥²`` at center of cell `I` where `ω` can be used
