@@ -15,9 +15,7 @@ end
 
 Compute potential energy of a cell given gravitational field tuple `g`.
 """
-ρgh(I::CartesianIndex{D},g,f,λρ) where D = getρ(I,f,λρ)*fsum(D) do i
-    g[i]*loc(0,I)[i]
-end
+ρgh(I::CartesianIndex{D},g,f,λρ) where D = -getρ(I,f,λρ)*fsum((i)-> g[i]*loc(0,I)[i], D)
 """
     EnsI(I::CartesianIndex,u,U=0)
 
