@@ -138,7 +138,7 @@ function psolver!(p::Poisson;log=false,tol=1e-14,itmx=6e3)
     @inside z[I] = ϵ[I] = r[I]*p.iD[I]
     insideI = inside(x) # [insideI]
     rho = r ⋅ z
-    while (r₂>tol || nᵖ==0) && nᵖ<itmx
+    while r₂!= 0 && (r₂>tol || nᵖ==0) && nᵖ<itmx
         # abs(rho)<10eps(eltype(z)) && break
         perBC!(ϵ,p.perdir)
         @inside z[I] = mult(I,p.L,p.D,ϵ)
