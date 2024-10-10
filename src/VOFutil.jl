@@ -101,10 +101,8 @@ end
 @inline @fastmath fᶠ2ρuf(I,fᶠ,δl,λρ) = δl*λρ + (1-λρ)*fᶠ[I]
 
 # TODO: Perhaps using overload to avoid if branch?
-@inline @fastmath function getμ(i,j,I,f::AbstractArray{T,D},λμ,μ) where {T,D}
-    if i==j
-        return μ*(f[I-δ(i,I)]*(1-λμ)+λμ)
-    end
+@inline @fastmath getμ(::Val{true},i,j,I,f::AbstractArray{T,D},λμ,μ) where {T,D} = μ*(f[I-δ(i,I)]*(1-λμ)+λμ)
+@inline @fastmath function getμ(::Val{false},i,j,I,f::AbstractArray{T,D},λμ,μ) where {T,D}
     s = zero(T)
     for II∈(I-δ(i,I)-δ(j,I)):I
         s+= f[II]

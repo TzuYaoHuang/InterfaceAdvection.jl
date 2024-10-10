@@ -76,7 +76,7 @@ function MPFForcing!(r,u,ρuf,Φ,f,λμ,μ;perdir=())
 end
 
 # Viscous forcing overload
-@inline viscF(i,j,I,u,f,λμ,μ::Number) = getμ(i,j,I,f,λμ,μ)*(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
+@inline viscF(i,j,I,u,f,λμ,μ::Number) = getμ(Val{i==j}(),i,j,I,f,λμ,μ)*(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
 @inline viscF(i,j,I,u,f,λμ,μ::Nothing) = zero(eltype(f))
 
 # Neumann BC Building block

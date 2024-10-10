@@ -85,6 +85,7 @@ mutable struct TwoPhaseSimulation
         measure!(flow,body;ϵ)
         intf = cVOF(dims;arr=mem,T,InterfaceSDF,μ=ν,λμ,λρ,η,perdir)
         println("μ: $(intf.μ), λρ: $(intf.λρ)")
+        flow.Δt .= MPCFL(flow,intf)
         new(U,L,ϵ,flow,body,Poisson(flow.p,flow.μ₀,flow.σ;perdir),intf)
     end
 end
