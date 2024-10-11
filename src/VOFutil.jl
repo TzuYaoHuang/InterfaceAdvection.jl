@@ -85,6 +85,7 @@ Get three cell volume summation around index `I` along direction `summingDir`.
 """
 @inline @fastmath get3CellHeight(f,I,summingDir) = f[I]+f[I-δ(summingDir,I)]+f[I+δ(summingDir,I)]
 
+@inline @fastmath getρ(f,λρ) = λρ + (1-λρ)*f
 @inline @fastmath getρ(I,f,λρ) = λρ + (1-λρ)*f[I]
 @inline @fastmath getρ(d,I,f,λρ) = λρ + (1-λρ)*ϕ(d,I,f)
 
@@ -100,13 +101,15 @@ end
 
 @inline @fastmath fᶠ2ρuf(I,fᶠ,δl,λρ) = δl*λρ + (1-λρ)*fᶠ[I]
 
-# TODO: Perhaps using overload to avoid if branch?
-@inline @fastmath getμ(::Val{true},i,j,I,f::AbstractArray{T,D},λμ,μ) where {T,D} = μ*(f[I-δ(i,I)]*(1-λμ)+λμ)
-@inline @fastmath function getμ(::Val{false},i,j,I,f::AbstractArray{T,D},λμ,μ) where {T,D}
-    s = zero(T)
-    for II∈(I-δ(i,I)-δ(j,I)):I
-        s+= f[II]
-    end
-    s/=4
-    return μ*(s*(1-λμ)+λμ)
+@inline @fastmath function getμ(::Val{true},i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D} 
+    # TODO: optimize at boundary
+    f1,f2,f3 = f[I],f[I-δ(i,I)],(I[i]>2 ? f[I-2δ(i,I)] : f[I-δ(i,I)])
+    fmin = min(f1+f2,f2+f3)/2
+    return μ*min(f2*(1-λμ)+λμ, max(1,λμ/λρ)*getρ(fmin,λρ))
+end
+@inline @fastmath function getμ(::Val{false},i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D}
+    f1,f2,f3,f4 = f[I],f[I-δ(i,I)],f[I-δ(i,I)-δ(j,I)],f[I-δ(j,I)]
+    s = (f1+f2+f3+f4)/4
+    fmin = min(f1+f2,f2+f3,f3+f4,f4+f1)/2
+    return μ*min(s*(1-λμ)+λμ, max(1,λμ/λρ)*getρ(fmin,λρ))
 end

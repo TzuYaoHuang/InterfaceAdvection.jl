@@ -21,7 +21,7 @@ import LinearAlgebra: ⋅
     advect!(a,c,c.f,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.λμ,c.μ;perdir=a.perdir)
+    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.λμ,c.μ,c.λρ;perdir=a.perdir)
     updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -40,7 +40,7 @@ import LinearAlgebra: ⋅
     # currently i use @. c.f = (c.f+c.f⁰)/2, should be fine for viscous flow but the sharpness of 
     # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
     # solver than one should actually use c.f⁰.
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.λμ,c.μ;perdir=a.perdir) 
+    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.λμ,c.μ,c.λρ;perdir=a.perdir) 
     updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -52,7 +52,7 @@ import LinearAlgebra: ⋅
 end
 
 # Forcing with the unit of ρu instead of u
-function MPFForcing!(r,u,ρuf,Φ,f,λμ,μ;perdir=())
+function MPFForcing!(r,u,ρuf,Φ,f,λμ,μ,λρ;perdir=())
     N,D = size_u(u)
     r .= 0.
 
@@ -63,30 +63,30 @@ function MPFForcing!(r,u,ρuf,Φ,f,λμ,μ;perdir=())
     for i∈1:D, j∈1:D
         tagper = (j∈perdir)
         # treatment for bottom boundary with BCs
-        lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,Val{tagper}())
+        lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
         # inner cells
-        @loop (Φ[I] = ϕu(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ);
+        @loop (Φ[I] = ϕu(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ);
                 r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
         @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
         # treatment for upper boundary with BCs
-        upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,Val{tagper}())
+        upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
     end
 
     # TODO: surface tension
 end
 
 # Viscous forcing overload
-@inline viscF(i,j,I,u,f,λμ,μ::Number) = getμ(Val{i==j}(),i,j,I,f,λμ,μ)*(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
-@inline viscF(i,j,I,u,f,λμ,μ::Nothing) = zero(eltype(f))
+@inline viscF(i,j,I,u,f,λμ,μ::Number,λρ) = getμ(Val{i==j}(),i,j,I,f,λμ,μ,λρ)*(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
+@inline viscF(i,j,I,u,f,λμ,μ::Nothing,λρ) = zero(eltype(f))
 
 # Neumann BC Building block
-lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,::Val{false}) = @loop r[I,i] += ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ) over I ∈ slice(N,2,j,2)
-upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) + viscF(i,j,I,u,f,λμ,μ) over I ∈ slice(N,N[j],j,2)
+lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
+upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) + viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
 
 # Periodic BC Building block
-lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,::Val{true}) = @loop (
-    Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
-upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
+lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
+    Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
+upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
 function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U)
