@@ -104,12 +104,12 @@ end
 @inline @fastmath function getμ(::Val{true},i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D} 
     # TODO: optimize at boundary
     f1,f2,f3 = f[I],f[I-δ(i,I)],(I[i]>2 ? f[I-2δ(i,I)] : f[I-δ(i,I)])
-    fmin = min(f1+f2,f2+f3)/2
-    return μ*min(f2*(1-λμ)+λμ, max(1,λμ/λρ)*getρ(fmin,λρ))
+    fmin = λρ < 1 ? min(f1+f2,f2+f3)/2 : max(f1+f2,f2+f3)/2
+    return μ*min(f2*(1-λμ)+λμ, ifelse(f2>0.5,1,λμ/λρ)*getρ(fmin,λρ))
 end
 @inline @fastmath function getμ(::Val{false},i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D}
     f1,f2,f3,f4 = f[I],f[I-δ(i,I)],f[I-δ(i,I)-δ(j,I)],f[I-δ(j,I)]
     s = (f1+f2+f3+f4)/4
-    fmin = min(f1+f2,f2+f3,f3+f4,f4+f1)/2
-    return μ*min(s*(1-λμ)+λμ, max(1,λμ/λρ)*getρ(fmin,λρ))
+    fmin = λρ < 1 ? min(f1+f2,f2+f3,f3+f4,f4+f1)/2 : max(f1+f2,f2+f3,f3+f4,f4+f1)/2
+    return μ*min(s*(1-λμ)+λμ, ifelse(s>0.5,1,λμ/λρ)*getρ(fmin,λρ))
 end
