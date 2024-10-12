@@ -10,12 +10,14 @@ This function take multiphase into account so as the staggered arragement.
 ρkeI(I::CartesianIndex{D},u,f,λρ,U=fSV(zero,D)) where D = 0.25fsum(D) do i
     ((u[I,i]-U[i])^2+(u[I+δ(i,I),i]-U[i])^2)*getρ(I,f,λρ)
 end
+
 """
     ρgh(I,g,f,λρ)
 
 Compute potential energy of a cell given gravitational field tuple `g`.
 """
 ρgh(I::CartesianIndex{D},g,f,λρ) where D = -getρ(I,f,λρ)*fsum((i)-> g[i]*loc(0,I)[i], D)
+
 """
     EnsI(I::CartesianIndex,u,U=0)
 
@@ -30,6 +32,7 @@ end
 EnsI(I::CartesianIndex{2},ω) = 0.5*0.25*(
     ω[I]^2+ω[I+δ(1,I)]^2+ω[I+δ(2,I)]^2+ω[I+δ(1,I)+δ(2,I)]^2
 )
+
 """
     ρuI(i,I::CartesianIndex,u,U=0)
 
@@ -41,4 +44,9 @@ This function take multiphase into account so as the staggered arragement.
     0.5(u[I,i]+u[I+δ(i,I),i]-2U[i])*getρ(I,f,λρ)
 end
 
+"""
+    getAnotherDir(d,n)
+
+Given `1:n` directions, return tuple that exclude direction `d`.
+"""
 getAnotherDir(d,n) = filter(i-> i≠d,(1:n...,))

@@ -85,31 +85,68 @@ Get three cell volume summation around index `I` along direction `summingDir`.
 """
 @inline @fastmath get3CellHeight(f,I,summingDir) = f[I]+f[I-δ(summingDir,I)]+f[I+δ(summingDir,I)]
 
-@inline @fastmath getρ(f,λρ) = λρ + (1-λρ)*f
-@inline @fastmath getρ(I,f,λρ) = λρ + (1-λρ)*f[I]
-@inline @fastmath getρ(d,I,f,λρ) = λρ + (1-λρ)*ϕ(d,I,f)
+"""
+    linInterpProp(f,λ,base=one(eltype(f)))
 
-ρu2u!(u,ρu,f,λρ) = @loop ρu2u!(u,ρu,f,λρ,I) over I∈inside(f)
-@inline @fastmath ρu2u!(u,ρu,f::AbstractArray{T,D},λρ,I) where {T,D} = for d∈1:D
-    u[I,d] = ρu[I,d]/getρ(d,I,f,λρ)
-end
+Linearly interpolate fluid properties (ρ, μ, ν, etc.) according to volume fraction `f` and the property's ratio of light to dark fluid.
+The property of dark fluid is assumed to be 1, but can be specified with the third argument.
+"""
+@inline @fastmath linInterpProp(f,λ,base=one(eltype(f))) = base*(λ + (1-λ)*f)
 
-u2ρu!(ρu,u,f,λρ) = @loop u2ρu!(ρu,u,f,λρ,I) over I∈inside(f)
-@inline @fastmath u2ρu!(ρu,u,f::AbstractArray{T,D},λρ,I) where {T,D} = for d∈1:D
-    ρu[I,d] = u[I,d]*getρ(d,I,f,λρ)
-end
+"""
+    getρ(I,f,λρ)
+    getρ(d,I,f,λρ)
 
-@inline @fastmath fᶠ2ρuf(I,fᶠ,δl,λρ) = δl*λρ + (1-λρ)*fᶠ[I]
+Linearly interpolate density at either `I` or `I-0.5d`.
+"""
+@inline @fastmath getρ(I,f,λρ) = linInterpProp(f[I],λρ)
+@inline @fastmath getρ(d,I,f,λρ) = linInterpProp(ϕ(d,I,f),λρ)
 
+"""
+    getμ(IJEQUAL,i,j,I,f::AbstractArray{T,D},λμ,μ,λρ)
+
+Calculate the viscosity corresponding to the term ∂ⱼuᵢ @ either `I-0.5i-0.5j` or `I-1i`.
+The function return the linear interpolation at cell center (when `i==j`) or cell vertex (when `i≠j`).
+Specify at `IJEQUAL` with `Val{i==j}()`.
+The calculated viscosity is limited with the majority fluid's kinematic viscosity applied to interpolation.
+The dynamic viscosity is then recovered using the minimal density of the cells who are going to use the stress flux.
+"""
 @inline @fastmath function getμ(::Val{true},i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D} 
     # TODO: optimize at boundary
     f1,f2,f3 = f[I],f[I-δ(i,I)],(I[i]>2 ? f[I-2δ(i,I)] : f[I-δ(i,I)])
     fmin = λρ < 1 ? min(f1+f2,f2+f3)/2 : max(f1+f2,f2+f3)/2
-    return μ*min(f2*(1-λμ)+λμ, ifelse(f2>0.5,1,λμ/λρ)*getρ(fmin,λρ))
+    return μ*min(linInterpProp(f2,λμ), ifelse(f2>0.5,1,λμ/λρ)*linInterpProp(fmin,λρ))
 end
 @inline @fastmath function getμ(::Val{false},i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D}
     f1,f2,f3,f4 = f[I],f[I-δ(i,I)],f[I-δ(i,I)-δ(j,I)],f[I-δ(j,I)]
     s = (f1+f2+f3+f4)/4
     fmin = λρ < 1 ? min(f1+f2,f2+f3,f3+f4,f4+f1)/2 : max(f1+f2,f2+f3,f3+f4,f4+f1)/2
-    return μ*min(s*(1-λμ)+λμ, ifelse(s>0.5,1,λμ/λρ)*getρ(fmin,λρ))
+    return μ*min(linInterpProp(s,λμ), ifelse(s>0.5,1,λμ/λρ)*linInterpProp(fmin,λρ))
 end
+
+"""
+    ρu2u!(u,ρu,f,λρ)
+
+Convert mass flux `ρu` to velocity `u` at the corresponding momentum cell.
+"""
+ρu2u!(u,ρu,f,λρ) = @loop ρu2u!(u,ρu,f,λρ,I) over I∈inside(f)
+@inline @fastmath ρu2u!(u,ρu,f::AbstractArray{T,D},λρ,I) where {T,D} = for d∈1:D
+    u[I,d] = ρu[I,d]/getρ(d,I,f,λρ)
+end
+
+"""
+    ρu2u!(u,ρu,f,λρ)
+
+Convert velocity `u` to mass flux `ρu` at the corresponding momentum cell.
+"""
+u2ρu!(ρu,u,f,λρ) = @loop u2ρu!(ρu,u,f,λρ,I) over I∈inside(f)
+@inline @fastmath u2ρu!(ρu,u,f::AbstractArray{T,D},λρ,I) where {T,D} = for d∈1:D
+    ρu[I,d] = u[I,d]*getρ(d,I,f,λρ)
+end
+
+"""
+    fᶠ2ρuf(I,fᶠ,δl,λρ)
+
+Convert volume flux `fᶠ` @ `I` to mash flux.
+"""
+@inline @fastmath fᶠ2ρuf(I,fᶠ,δl,λρ) = δl*λρ + (1-λρ)*fᶠ[I]
