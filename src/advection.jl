@@ -36,7 +36,7 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄, ρuf,λρ;
         reportFillError(f,u,u⁰,d,tol)
 
         cleanWisp!(f,tol)
-        BCVOF!(f,α,n̂;perdir)
+        BCf!(f;perdir)
     end
 end
 

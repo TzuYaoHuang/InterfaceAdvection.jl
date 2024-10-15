@@ -38,14 +38,27 @@ function BCVOF!(f,α,n̂;perdir=())
     for j∈1:D
         if j in perdir
             # TODO: can we merge f,α,n̂ together?
+            @loop fαn̂!(f,α,n̂, I,j,N[j]-1) over I ∈ slice(N,1,j)
+            @loop fαn̂!(f,α,n̂, I,j,2) over I ∈ slice(N,N[j],j)
+        else
+            @loop f[I] = f[I+δ(j,I)] over I ∈ slice(N,1,j)
+            @loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j)
+        end
+    end
+end
+function fαn̂!(f,α,n̂, I,j,ii)
+    f[I] = f[CIj(j,I,ii)]
+    for i ∈ 1:D
+        n̂[I,i] = n̂[CIj(j,I,ii),i]
+    end
+    α[I] = α[CIj(j,I,ii)]
+end
+function BCf!(f;perdir=())
+    N = size(f); D = length(N)
+    for j∈1:D
+        if j in perdir
             @loop f[I] = f[CIj(j,I,N[j]-1)] over I ∈ slice(N,1,j)
             @loop f[I] = f[CIj(j,I,2)] over I ∈ slice(N,N[j],j)
-            for i ∈ 1:D
-                @loop n̂[I,i] = n̂[CIj(j,I,N[j]-1),i] over I ∈ slice(N,1,j)
-                @loop n̂[I,i] = n̂[CIj(j,I,2),i] over I ∈ slice(N,N[j],j)
-            end
-            @loop α[I] = α[CIj(j,I,N[j]-1)] over I ∈ slice(N,1,j)
-            @loop α[I] = α[CIj(j,I,2)] over I ∈ slice(N,N[j],j)
         else
             @loop f[I] = f[I+δ(j,I)] over I ∈ slice(N,1,j)
             @loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j)
