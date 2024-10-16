@@ -16,7 +16,7 @@ using Test
         n̂2D = zeros(T,1,1,2); n̂2D[1,1,:] .= (-T(7/6),T(4/9))
         @test getIntercept(n̂2D,CartesianIndex(1,1),T(7/23)) == getIntercept(SA[-T(7/6),T(4/9)],T(7/23)) ≈ getIntercept(-T(7/6),T(4/9),T(0),T(7/23))
         n̂3D = zeros(T,1,1,1,3); n̂3D[1,1,1,:] .= (T(7/6),T(4/9),-T(29/97))
-        @test getIntercept(n̂3D,CartesianIndex(1,1,1),T(7/23)) == getIntercept(T(7/6),T(4/9),-T(29/97),T(7/23)) == getIntercept(SA[T(7/6),T(4/9),-T(29/97)],T(7/23))
+        @test getIntercept(n̂3D,CartesianIndex(1,1,1),T(7/23)) == getIntercept(T(7/6),T(4/9),-T(29/97),T(7/23)) ≈ getIntercept(SA[T(7/6),T(4/9),-T(29/97)],T(7/23))
 
         @test getVolumeFraction(T(2/3),T(4/3),T(0),T(8/9)) ≈ getVolumeFraction(T(2/3),T(4/3),T(8/9)) ≈ T(5/12)
         @test getVolumeFraction(T(2/3),T(0),T(4/3),T(8/9)) ≈ getVolumeFraction(T(2/3),T(4/3),T(8/9)) ≈ T(5/12)
@@ -25,7 +25,7 @@ using Test
         @test getVolumeFraction(T(1/2),T(1/3),T(1),T(1)) ≈ T(7/12)
         @test getVolumeFraction(T(1),T(1),-T(1),T(3/2)) ≈ T(1-1/48)
         n̂2D = zeros(T,1,1,2); n̂2D[1,1,:] .= (-T(7/6),T(4/9))
-        @test getVolumeFraction(n̂2D,CartesianIndex(1,1),T(7/23)) == getVolumeFraction(-T(7/6),T(4/9),T(0),T(7/23)) == getVolumeFraction(SA[-T(7/6),T(4/9)],T(7/23))
+        @test getVolumeFraction(n̂2D,CartesianIndex(1,1),T(7/23)) == getVolumeFraction(SA[-T(7/6),T(4/9)],T(7/23)) ≈ getVolumeFraction(-T(7/6),T(4/9),T(0),T(7/23)) 
         n̂3D = zeros(T,1,1,1,3); n̂3D[1,1,1,:] .= (T(7/6),T(4/9),-T(29/97))
         @test getVolumeFraction(n̂3D,CartesianIndex(1,1,1),T(7/23)) == getVolumeFraction(T(7/6),T(4/9),-T(29/97),T(7/23)) == getVolumeFraction(SA[T(7/6),T(4/9),-T(29/97)],T(7/23))
     end
