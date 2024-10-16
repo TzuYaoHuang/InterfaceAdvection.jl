@@ -49,7 +49,7 @@ function getInterfaceNormal_WY!(f::AbstractArray{T,D},n̂,I) where {T,D}
         hr = get3CellHeight(f,I+δ(d,I),dominantDir)
 
         # general case
-        n̂[I,d] = (hl-hr)*0.5
+        n̂[I,d] = (hl-hr)/2
 
         # Too steep
         n̂[I,d] = ifelse(

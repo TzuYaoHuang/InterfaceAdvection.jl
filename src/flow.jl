@@ -4,7 +4,7 @@ import LinearAlgebra: ⋅
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
 @fastmath koren(u,c,d) = median((5c+2d-u)/6,c,median(2c-1u,c,d))
-@fastmath cen(u,c,d) = 0.5*(c+d)
+@fastmath cen(u,c,d) = (c+d)/2
 @inline ϕu(a,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuP(a,Ip,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuL(a,I,f,u,λ=koren) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
@@ -54,7 +54,7 @@ end
 # Forcing with the unit of ρu instead of u
 function MPFForcing!(r,u,ρuf,Φ,f,λμ,μ,λρ;perdir=())
     N,D = size_u(u)
-    r .= 0.
+    r .= 0
 
     # i is velocity direction
     # j is face direction (differential)
@@ -113,9 +113,9 @@ end
     Δt_Adv = inv(maximum(a.σ)+5a.ν)
 
     @inside a.σ[I] = maxTotalFlux(I,a.u)
-    Δt_cVOF = 0.5/maximum(a.σ)
+    Δt_cVOF = 1/2maximum(a.σ)
     Δt_Grav = isnothing(a.g) ? Δt_max : 1/√sum(i->a.g(i,timeNow)^2, 1:D)
-    Δt_Visc = isnothing(c.μ) ? Δt_max : 3/14*1/(c.μ*max(1,c.λμ/c.λρ))
+    Δt_Visc = isnothing(c.μ) ? Δt_max : 3/(14*c.μ*max(1,c.λμ/c.λρ))
     Δt_SurfT = isnothing(c.η) ? Δt_max : sqrt((1+c.λρ)/(8π*c.η))  # 8 from kelli's code
 
     return safetyMargin*min(Δt_cVOF,Δt_Adv,Δt_Grav,Δt_Visc,Δt_SurfT)
