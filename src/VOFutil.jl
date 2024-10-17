@@ -13,7 +13,7 @@ function applyVOF!(f,α,n̂,InterfaceSDF)
 end
 @inline function applyVOF!(f::AbstractArray{T,D},α::AbstractArray{T,D},n̂::AbstractArray{T,Dv},InterfaceSDF,I) where {T,D,Dv}
     # forwarddiff cause some problem so using finite diff
-    δd = 0.01
+    δd = T(0.01)
     for i∈1:D
         xyzpδ = SVector{D,T}(loc(0,I) .+δd .*δ(i,I).I)
         xyzmδ = SVector{D,T}(loc(0,I) .-δd .*δ(i,I).I)
@@ -22,7 +22,7 @@ end
     sumN2 = 0; for i∈1:D sumN2+= n̂[I,i]^2 end
 
     # (n̂·𝐱 - α)/|n̂| = d
-    α[I] = - √sumN2*InterfaceSDF(loc(0,I).-0.5)
+    α[I] = - √sumN2*InterfaceSDF(loc(0,I).-T(0.5))
 
     # the PLIC estimation
     f[I] = getVolumeFraction(n̂,I,α[I])
@@ -89,7 +89,7 @@ Check whether `f` is interface cell.
 
 Check whether `fc` is full of dark or light fluid.
 """
-@inline fullorempty(fc) = (fc==0.0 || fc==1.0)
+@inline fullorempty(fc) = (fc==0 || fc==1)
 
 """
     get3CellHeight(f,I,summingDir)
