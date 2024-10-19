@@ -105,7 +105,8 @@ function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
     BC!(μ₀,zeros(SVector{D,T}),false,perdir)
 end
 
-@fastmath @inline function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=one(T),safetyMargin=T(0.8)) where {D,T}
+# NOTE: Do not use @fastmath for CFL. It has problem dealing with maximum function in GPU.
+@inline function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=one(T),safetyMargin=T(0.8)) where {D,T}
     timeNow = sum(a.Δt)
     a.σ .= zero(T)
 
@@ -131,7 +132,7 @@ end
 end
 
 
-function psolver!(p::Poisson;log=false,tol=1e-14,itmx=6e3)
+function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
     perBC!(p.x,p.perdir)
     residual!(p); r₂ = L₂(p)
     nᵖ=0
