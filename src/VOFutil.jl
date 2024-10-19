@@ -124,13 +124,13 @@ Specify at `IJEQUAL` with `Val{i==j}()`.
 The calculated viscosity is limited with the majority fluid's kinematic viscosity applied to interpolation.
 The dynamic viscosity is then recovered using the minimal density of the cells who are going to use the stress flux.
 """
-@inline @fastmath function getμ(::Val{true},i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D} 
+@inline @fastmath function getμCell(i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D} 
     # TODO: optimize at boundary
     f1,f2,f3 = f[I],f[I-δ(i,I)],(I[i]>2 ? f[I-2δ(i,I)] : f[I-δ(i,I)])
     fmin = λρ < 1 ? min(f1+f2,f2+f3)/2 : max(f1+f2,f2+f3)/2
     return μ*min(linInterpProp(f2,λμ), ifelse(f2>0.5,1,λμ/λρ)*linInterpProp(fmin,λρ))
 end
-@inline @fastmath function getμ(::Val{false},i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D}
+@inline @fastmath function getμEdge(i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D}
     f1,f2,f3,f4 = f[I],f[I-δ(i,I)],f[I-δ(i,I)-δ(j,I)],f[I-δ(j,I)]
     s = (f1+f2+f3+f4)/4
     fmin = λρ < 1 ? min(f1+f2,f2+f3,f3+f4,f4+f1)/2 : max(f1+f2,f2+f3,f3+f4,f4+f1)/2

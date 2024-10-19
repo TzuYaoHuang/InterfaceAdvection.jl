@@ -76,7 +76,8 @@ function MPFForcing!(r,u,ρuf,Φ,f,λμ,μ,λρ;perdir=())
 end
 
 # Viscous forcing overload
-@inline viscF(i,j,I,u,f,λμ,μ::Number,λρ) = getμ(Val{i==j}(),i,j,I,f,λμ,μ,λρ)*(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
+# TODO: possiblity to use Val?
+@inline viscF(i,j,I,u,f,λμ,μ::Number,λρ) = (i==j ? getμCell(i,j,I,f,λμ,μ,λρ) : getμEdge(i,j,I,f,λμ,μ,λρ)) *(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
 @inline viscF(i,j,I,u,f,λμ,μ::Nothing,λρ) = zero(eltype(f))
 
 # Neumann BC Building block
