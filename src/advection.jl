@@ -89,6 +89,7 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace, ρuf,λρ) w
     return nothing
 end
 
+using CUDA: @allowscalar
 """
 reportFillError(f,u,u⁰,d,tol)
 
@@ -99,7 +100,7 @@ function reportFillError(f,u,u⁰,d,tol)
     maxf, maxid = findmax(f)
     minf, minid = findmin(f)
     if maxf-1 > tol
-        du⁰,du = abs(div(maxid,u⁰)),abs(div(maxid,u))
+        @allowscalar du⁰,du = abs(div(maxid,u⁰)),abs(div(maxid,u))
         @printf("|∇⋅u⁰| = %+13.8f, |∇⋅u| = %+13.8f\n",du⁰,du)
         errorMsg = "max VOF @ $(maxid.I) ∉ [0,1] @ direction $d, Δf = $(maxf-1)"
         (du⁰+du > 10) && error(errorMsg)
@@ -111,7 +112,7 @@ function reportFillError(f,u,u⁰,d,tol)
         end
     end
     if minf < -tol
-        du⁰,du = abs(div(minid,u⁰)),abs(div(minid,u))
+        @allowscalar du⁰,du = abs(div(minid,u⁰)),abs(div(minid,u))
         @printf("|∇⋅u⁰| = %+13.8f, |∇⋅u| = %+13.8f\n",du⁰,du)
         errorMsg = "min VOF @ $(minid.I) ∉ [0,1] @ direction $d, Δf = $(-minf)"
         (du⁰+du > 10) && error(errorMsg)

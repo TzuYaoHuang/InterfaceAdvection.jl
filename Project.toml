@@ -4,6 +4,7 @@ authors = ["Tzu-Yao Huang <tzuyao.jason.huang@gmail.com> and contributors"]
 version = "1.0.0-DEV"
 
 [deps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -11,6 +12,7 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 WaterLily = "ed894a53-35f9-47f1-b17f-85db9237eebd"
 
 [compat]
+CUDA = "5.5.2"
 julia = "1"
 
 [extras]
