@@ -144,7 +144,7 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
         # abs(rho)<10eps(eltype(z)) && break
         perBC!(ϵ,p.perdir)
         @inside z[I] = mult(I,p.L,p.D,ϵ)
-        alpha = rho/(@views z[insideI]⋅ϵ[insideI])
+        alpha = rho/(z[insideI]⋅ϵ[insideI]) # views does not work with inner product super well.
         @loop (x[I] += alpha*ϵ[I];
                r[I] -= alpha*z[I]) over I ∈ inside(x)
         @inside z[I] = r[I]*p.iD[I]
