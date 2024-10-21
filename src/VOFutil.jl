@@ -46,7 +46,7 @@ function BCVOF!(f,α,n̂;perdir=())
         end
     end
 end
-function fαn̂!(f,α,n̂, I,j,ii)
+function fαn̂!(f::AbstractArray{T,D},α,n̂, I,j,ii) where {T,D}
     f[I] = f[CIj(j,I,ii)]
     for i ∈ 1:D
         n̂[I,i] = n̂[CIj(j,I,ii),i]
