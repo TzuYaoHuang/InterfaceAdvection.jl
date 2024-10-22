@@ -81,11 +81,9 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace, ρuf,λρ) w
 
     # general case
     a = ifelse(δl>0, α[ICell]-n̂[ICell,d]*(1-δl), α[ICell])
-    n̂dOrig = n̂[ICell,d]
-    n̂[ICell,d] *= abs(δl)
-    fᶠ[IFace] = getVolumeFraction(n̂, ICell, a)*δl
+    n̂Cell = ntuple((ii)->n̂[ICell,ii]*ifelse(ii==d,abs(δl),1),D)
+    fᶠ[IFace] = getVolumeFraction(n̂Cell..., a)*δl
     ρuf[IFace,d] = fᶠ2ρuf(IFace,fᶠ,δl,λρ)
-    n̂[ICell,d] = n̂dOrig
     return nothing
 end
 
