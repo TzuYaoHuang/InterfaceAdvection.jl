@@ -124,7 +124,7 @@ Specify at `IJEQUAL` with `Val{i==j}()`.
 The calculated viscosity is limited with the majority fluid's kinematic viscosity applied to interpolation.
 The dynamic viscosity is then recovered using the minimal density of the cells who are going to use the stress flux.
 """
-@inline @fastmath getμCell(i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) = μ*linInterpProp(f[I-δ(i,I)],λμ)
+@inline @fastmath getμCell(i,j,I,f,λμ,μ,λρ) = μ*linInterpProp(f[I-δ(i,I)],λμ)
 @inline @fastmath function getμEdge(i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D}
     f1,f2,f3,f4 = f[I],f[I-δ(i,I)],f[I-δ(i,I)-δ(j,I)],f[I-δ(j,I)]
     s = (f1+f2+f3+f4)/4
