@@ -8,6 +8,7 @@ end
 
 using Printf
 import WaterLily: div,δ
+import InterfaceAdvection: reportFillError
 
 """
     __init__()
