@@ -144,7 +144,9 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
         # abs(rho)<10eps(eltype(z)) && break
         perBC!(ϵ,p.perdir)
         @inside z[I] = mult(I,p.L,p.D,ϵ)
-        alpha = rho/(z[insideI]⋅ϵ[insideI]) # views does not work with inner product super well.
+        # views does not work with inner product super well.
+        # TODO: add view back when the next version of CUDA is out
+        alpha = rho/(z[insideI]⋅ϵ[insideI]) 
         @loop (x[I] += alpha*ϵ[I];
                r[I] -= alpha*z[I]) over I ∈ inside(x)
         @inside z[I] = r[I]*p.iD[I]
