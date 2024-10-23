@@ -76,7 +76,7 @@ end
 end
 
 @testset "VOFutil.jl" begin
-    import InterfaceAdvection: get3CellHeight,getρ,getμ
+    import InterfaceAdvection: get3CellHeight,getρ,getμCell,getμEdge
     Ng = (3,3)
     Ic = CartesianIndex(2,2)
     Iur= CartesianIndex(Ng)
@@ -86,8 +86,8 @@ end
     @test get3CellHeight(f,Ic,2) ≈ 0.96
     @test getρ(Ic,f,0.7) ≈ 0.796
     @test getρ(2,Ic,f,0.7) ≈ 0.748
-    @test getμ(Val{1==1}(),1,1,Iur,f,0.1,0.2,1) ≈ 0.1352
-    @test getμ(Val{1==2}(),1,2,Iur,f,0.1,0.2,0.2) == getμ(Val{1==2}(),2,1,Iur,f,0.1,0.2,0.2) ≈ 0.02
+    @test getμCell(1,1,Iur,f,0.1,0.2,1) ≈ 0.1352
+    @test getμEdge(1,2,Iur,f,0.1,0.2,0.2) == getμEdge(2,1,Iur,f,0.1,0.2,0.2) ≈ 0.02
     # TODO: BCVOF!
 end
 

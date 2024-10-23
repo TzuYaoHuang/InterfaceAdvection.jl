@@ -21,7 +21,7 @@ import LinearAlgebra: ⋅
     advect!(a,c,c.f,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.λμ,c.μ,c.λρ;perdir=a.perdir)
+    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.λμ,c.μ,c.λρ;perdir=a.perdir)
     updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -40,7 +40,7 @@ import LinearAlgebra: ⋅
     # currently i use @. c.f = (c.f+c.f⁰)/2, should be fine for viscous flow but the sharpness of 
     # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
     # solver than one should actually use c.f⁰.
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.λμ,c.μ,c.λρ;perdir=a.perdir) 
+    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.λμ,c.μ,c.λρ;perdir=a.perdir) 
     updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -76,7 +76,8 @@ function MPFForcing!(r,u,ρuf,Φ,f,λμ,μ,λρ;perdir=())
 end
 
 # Viscous forcing overload
-@inline viscF(i,j,I,u,f,λμ,μ::Number,λρ) = getμ(Val{i==j}(),i,j,I,f,λμ,μ,λρ)*(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
+# TODO: possiblity to use Val?
+@inline viscF(i,j,I,u,f,λμ,μ::Number,λρ) = (i==j ? getμCell(i,j,I,f,λμ,μ,λρ) : getμEdge(i,j,I,f,λμ,μ,λρ)) *(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
 @inline viscF(i,j,I,u,f,λμ,μ::Nothing,λρ) = zero(eltype(f))
 
 # Neumann BC Building block
@@ -104,7 +105,8 @@ function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
     BC!(μ₀,zeros(SVector{D,T}),false,perdir)
 end
 
-@fastmath @inline function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=one(T),safetyMargin=T(0.8)) where {D,T}
+# NOTE: Do not use @fastmath for CFL. It has problem dealing with maximum function in GPU.
+@inline function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=one(T),safetyMargin=T(0.8)) where {D,T}
     timeNow = sum(a.Δt)
     a.σ .= zero(T)
 
@@ -130,7 +132,7 @@ end
 end
 
 
-function psolver!(p::Poisson;log=false,tol=1e-14,itmx=6e3)
+function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
     perBC!(p.x,p.perdir)
     residual!(p); r₂ = L₂(p)
     nᵖ=0
@@ -142,7 +144,7 @@ function psolver!(p::Poisson;log=false,tol=1e-14,itmx=6e3)
         # abs(rho)<10eps(eltype(z)) && break
         perBC!(ϵ,p.perdir)
         @inside z[I] = mult(I,p.L,p.D,ϵ)
-        alpha = rho/(@views z[insideI]⋅ϵ[insideI])
+        alpha = rho/(z[insideI]⋅ϵ[insideI]) # views does not work with inner product super well.
         @loop (x[I] += alpha*ϵ[I];
                r[I] -= alpha*z[I]) over I ∈ inside(x)
         @inside z[I] = r[I]*p.iD[I]

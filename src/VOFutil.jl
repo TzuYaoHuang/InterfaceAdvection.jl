@@ -46,7 +46,7 @@ function BCVOF!(f,α,n̂;perdir=())
         end
     end
 end
-function fαn̂!(f,α,n̂, I,j,ii)
+function fαn̂!(f::AbstractArray{T,D},α,n̂, I,j,ii) where {T,D}
     f[I] = f[CIj(j,I,ii)]
     for i ∈ 1:D
         n̂[I,i] = n̂[CIj(j,I,ii),i]
@@ -124,13 +124,8 @@ Specify at `IJEQUAL` with `Val{i==j}()`.
 The calculated viscosity is limited with the majority fluid's kinematic viscosity applied to interpolation.
 The dynamic viscosity is then recovered using the minimal density of the cells who are going to use the stress flux.
 """
-@inline @fastmath function getμ(::Val{true},i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D} 
-    # TODO: optimize at boundary
-    f1,f2,f3 = f[I],f[I-δ(i,I)],(I[i]>2 ? f[I-2δ(i,I)] : f[I-δ(i,I)])
-    fmin = λρ < 1 ? min(f1+f2,f2+f3)/2 : max(f1+f2,f2+f3)/2
-    return μ*min(linInterpProp(f2,λμ), ifelse(f2>0.5,1,λμ/λρ)*linInterpProp(fmin,λρ))
-end
-@inline @fastmath function getμ(::Val{false},i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D}
+@inline @fastmath getμCell(i,j,I,f,λμ,μ,λρ) = μ*linInterpProp(f[I-δ(i,I)],λμ)
+@inline @fastmath function getμEdge(i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D}
     f1,f2,f3,f4 = f[I],f[I-δ(i,I)],f[I-δ(i,I)-δ(j,I)],f[I-δ(j,I)]
     s = (f1+f2+f3+f4)/4
     fmin = λρ < 1 ? min(f1+f2,f2+f3,f3+f4,f4+f1)/2 : max(f1+f2,f2+f3,f3+f4,f4+f1)/2

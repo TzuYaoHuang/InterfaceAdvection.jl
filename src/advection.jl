@@ -33,7 +33,7 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄, ρuf,λρ;
         getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d, ρuf,λρ)
         @loop f[I] += fᶠ[I]-fᶠ[I+δ(d,I)] + c̄[I]*(∂(d,I,u)+∂(d,I,u⁰))*δt/2 over I∈inside(f)
 
-        reportFillError(f,u,u⁰,d,tol)
+        reportFillError(f,u,u⁰,δt,d,tol)
 
         cleanWisp!(f,tol)
         BCf!(f;perdir)
@@ -81,26 +81,28 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace, ρuf,λρ) w
 
     # general case
     a = ifelse(δl>0, α[ICell]-n̂[ICell,d]*(1-δl), α[ICell])
-    n̂dOrig = n̂[ICell,d]
-    n̂[ICell,d] *= abs(δl)
-    fᶠ[IFace] = getVolumeFraction(n̂, ICell, a)*δl
+    n̂Cell = ntuple((ii)->n̂[ICell,ii]*ifelse(ii==d,abs(δl),1),D)
+    fᶠ[IFace] = getVolumeFraction(n̂Cell..., a)*δl
     ρuf[IFace,d] = fᶠ2ρuf(IFace,fᶠ,δl,λρ)
-    n̂[ICell,d] = n̂dOrig
     return nothing
 end
 
+using CUDA: @allowscalar
 """
 reportFillError(f,u,u⁰,d,tol)
 
 Report whenever `f` contains overfill or underfill elements with tolerence of `tol`.
 Meanwhile the divergence of `u` and `u⁰` is displayed.
 """
-function reportFillError(f,u,u⁰,d,tol)
+function reportFillError(f::AbstractArray{T,D},u,u⁰,δt,d,tol) where {T,D}
     maxf, maxid = findmax(f)
     minf, minid = findmin(f)
     if maxf-1 > tol
-        du⁰,du = abs(div(maxid,u⁰)),abs(div(maxid,u))
+        @allowscalar du⁰,du = abs(div(maxid,u⁰)),abs(div(maxid,u))
         @printf("|∇⋅u⁰| = %+13.8f, |∇⋅u| = %+13.8f\n",du⁰,du)
+        for d∈1:D
+            @allowscalar @printf("    %d -- uLeftδt: %+13.8f, uRightδt: %+13.8f\n", d, (u[maxid,d]+u⁰[maxid,d])*δt, (u[maxid+δ(d,maxid),d]+u⁰[maxid+δ(d,maxid),d])*δt)
+        end
         errorMsg = "max VOF @ $(maxid.I) ∉ [0,1] @ direction $d, Δf = $(maxf-1)"
         (du⁰+du > 10) && error(errorMsg)
         try
@@ -111,8 +113,11 @@ function reportFillError(f,u,u⁰,d,tol)
         end
     end
     if minf < -tol
-        du⁰,du = abs(div(minid,u⁰)),abs(div(minid,u))
+        @allowscalar du⁰,du = abs(div(minid,u⁰)),abs(div(minid,u))
         @printf("|∇⋅u⁰| = %+13.8f, |∇⋅u| = %+13.8f\n",du⁰,du)
+        for d∈1:D
+            @allowscalar @printf("    %d -- uLeftδt: %+13.8f, uRightδt: %+13.8f\n", d, (u[minid,d]+u⁰[minid,d])*δt, (u[minid+δ(d,minid),d]+u⁰[minid+δ(d,minid),d])*δt)
+        end
         errorMsg = "min VOF @ $(minid.I) ∉ [0,1] @ direction $d, Δf = $(-minf)"
         (du⁰+du > 10) && error(errorMsg)
         try
