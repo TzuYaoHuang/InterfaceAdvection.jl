@@ -16,6 +16,8 @@ Following algorithm proposed by [Scardovelli & Zaleski (2000)](https://doi.org/1
     getIntercept(v[1], v[2], g) :
     getIntercept(v[1], v[2], v[3], g)
 )
+@inline getIntercept(v::AbstractArray{2,T}, g) where T = getIntercept(v[1], v[2], g) 
+@inline getIntercept(v::AbstractArray{3,T}, g) where T = getIntercept(v[1], v[2], v[3], g) 
 @inline @fastmath function getIntercept(n1::T, n2::T, g::T) where T
     t = abs(n1)+abs(n2)
     if g!=0.5
@@ -54,6 +56,8 @@ Following algorithm proposed by [Scardovelli & Zaleski (2000)](https://doi.org/1
     getVolumeFraction(v[1], v[2], b) :
     getVolumeFraction(v[1], v[2], v[3], b)
 )
+@inline getVolumeFraction(v::NTuple{2,T}, b) where T = getVolumeFraction(v[1], v[2], b)
+@inline getVolumeFraction(v::NTuple{3,T}, b) where T = getVolumeFraction(v[1], v[2], v[3], b)
 @inline @fastmath function getVolumeFraction(n1::T, n2::T, b::T) where T
     t = abs(n1)+abs(n2)
     a = (b-min(n1, 0)-min(n2, 0))/t
