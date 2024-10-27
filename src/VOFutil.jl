@@ -132,6 +132,18 @@ The dynamic viscosity is then recovered using the minimal density of the cells w
     return μ*min(linInterpProp(s,λμ), ifelse(s>0.5,1,λμ/λρ)*linInterpProp(fmin,λρ))
 end
 
+####### VISCOSITY TEST
+@inline @fastmath getνClamp(f,ν,λν,δf=0.1) = ifelse(
+    f>1-δf, 
+    ν, 
+    ifelse(
+        f<δf,
+        ν*λν,
+        0
+))
+@inline @fastmath getνLinear(f,ν,λν) = linInterpProp(f,λν,ν)
+####### VISCOSITY TEST
+
 """
     ρu2u!(u,ρu,f,λρ)
 

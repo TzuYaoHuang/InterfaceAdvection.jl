@@ -3,6 +3,7 @@ import LinearAlgebra: ⋅
 
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
+@inline ∂²(a,I::CartesianIndex{m},u::AbstractArray{T,n}) where {T,n,m} = @inbounds (u[I+δ(a,I),a]+u[I-δ(a,I),a]-2u[I,a])/2
 @fastmath koren(u,c,d) = median((5c+2d-u)/6,c,median(2c-1u,c,d))
 @fastmath cen(u,c,d) = (c+d)/2
 @inline ϕu(a,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
@@ -22,7 +23,7 @@ import LinearAlgebra: ⋅
     # TODO: include measure
     a.μ₀ .= 1
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.λμ,c.μ,c.λρ;perdir=a.perdir)
-    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λμ,c.μ,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
@@ -41,7 +42,7 @@ import LinearAlgebra: ⋅
     # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
     # solver than one should actually use c.f⁰.
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.λμ,c.μ,c.λρ;perdir=a.perdir) 
-    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λμ,c.μ,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
@@ -89,12 +90,24 @@ lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
     Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
 upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
+####### VISCOSITY TEST
+# vanilla viscosity
+function ν∂²u!(forcing,u,f,λμ,μ,λρ)
+    @loop ν∂²u!(forcing,u,f,λμ,μ,λρ,I) over I∈inside(f)
+end
+function ν∂²u!(forcing,u,f::AbstractArray{T,D},λμ,μ,λρ,I) where {T,D}
+    for i∈1:D, j∈1:D
+        forcing[I,i] += getνClamp(ϕ(i,I,f),μ,λμ/λρ) * ∂²(j,I,u)
+    end
+end
+####### VISCOSITY TEST
 
-function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U)
+function updateU!(u,ρu,forcing,dt,f,λμ,μ,λρ,ΔtList,g,U)
     @loop ρu[Ii] += forcing[Ii]*dt over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
     forcing .= 0
     accelerate!(forcing,ΔtList,g,U)
+    # ν∂²u!(forcing,u,f,λμ,μ,λρ)
     @loop u[Ii] += forcing[Ii]*dt over Ii∈CartesianIndices(u)
 end
 
