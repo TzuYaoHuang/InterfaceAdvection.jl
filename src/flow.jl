@@ -21,7 +21,7 @@ import LinearAlgebra: ⋅
     advect!(a,c,c.f,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.λμ,c.μ,c.λρ;perdir=a.perdir)
+    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -40,7 +40,7 @@ import LinearAlgebra: ⋅
     # currently i use @. c.f = (c.f+c.f⁰)/2, should be fine for viscous flow but the sharpness of 
     # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
     # solver than one should actually use c.f⁰.
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.λμ,c.μ,c.λρ;perdir=a.perdir) 
+    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
     updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -52,7 +52,7 @@ import LinearAlgebra: ⋅
 end
 
 # Forcing with the unit of ρu instead of u
-function MPFForcing!(r,u,ρuf,Φ,f,λμ,μ,λρ;perdir=())
+function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     N,D = size_u(u)
     r .= 0
 
@@ -72,7 +72,7 @@ function MPFForcing!(r,u,ρuf,Φ,f,λμ,μ,λρ;perdir=())
         upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
     end
 
-    # TODO: surface tension
+    surfTen!(r,f,α,n̂,fbuffer,η;perdir)
 end
 
 # Viscous forcing overload
