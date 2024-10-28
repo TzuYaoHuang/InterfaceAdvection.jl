@@ -72,3 +72,10 @@ function majorDir(n̂,I)
     i = myargmax(n̂,I)
     return copysign(i,n̂[I,i])
 end
+
+"""
+    validCI(I,f)
+
+Check whether the cartesian index is valid or not.
+"""
+validCI(I::CartesianIndex{D},f::AbstractArray{T,D}) where {T,D} = all(ntuple(i->1,D) .≤ I.I .≤ size(f))

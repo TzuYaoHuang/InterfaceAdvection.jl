@@ -22,7 +22,7 @@ include("advection.jl")
 export advect!,advectVOF!,getVOFFlux!
 
 include("surfaceTension.jl")
-# TODO: SURFACE TENSION!
+surfTen!,getCurvature,getPopinetHeight
 
 include("flow.jl")
 export MPFMomStep!
