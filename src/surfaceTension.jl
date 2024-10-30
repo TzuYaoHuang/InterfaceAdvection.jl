@@ -5,7 +5,7 @@
 Compute surface tension force effect on momentum.
 The curvature is calculated on each momentum direction separately, consequently, the surface tension force also.
 """
-surfTen!(forcing,f::AbstractArray{T,D},α,n̂,fbuffer,η::Nothing;perdir=()) = nothing
+surfTen!(forcing,f::AbstractArray{T,D},α,n̂,fbuffer,η::Nothing;perdir=()) where {T,D} = nothing
 surfTen!(forcing,f::AbstractArray{T,D},α,n̂,fbuffer,η::Number;perdir=()) where {T,D} = for d∈1:D
     @inside fbubber[I] = ϕ(d,I,f)
     BCf!(f;perdir)
