@@ -27,6 +27,9 @@ import LinearAlgebra: ⋅
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
 
+    # c.f⁰ .= c.f
+    # a.u⁰ .= a.u
+
     # corrector u → u¹
     U = BCTuple(a.U,a.Δt,D)
     # recover ρu @ t = n since it is modified for the predictor step
@@ -116,7 +119,7 @@ end
 
     @inside a.σ[I] = maxTotalFlux(I,a.u)
     Δt_cVOF = 1/2maximum(a.σ)
-    Δt_Grav = isnothing(a.g) ? Δt_max : 1/√sum(i->a.g(i,timeNow)^2, 1:D)
+    Δt_Grav = isnothing(a.g) ? Δt_max : 1/(2*√sum(i->a.g(i,timeNow)^2, 1:D))
     Δt_Visc = isnothing(c.μ) ? Δt_max : 3/(14*c.μ*max(1,c.λμ/c.λρ))
     Δt_SurfT = isnothing(c.η) ? Δt_max : sqrt((1+c.λρ)/(8π*c.η))  # 8 from kelli's code
 
@@ -162,6 +165,7 @@ end
 
 function myproject!(a::Flow{n},b::AbstractPoisson,w=1) where n
     dt = w*a.Δt[end]
+    b.z .= 0; b.ϵ .= 0; b.r .= 0
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
     psolver!(b)
     for i ∈ 1:n  # apply solution and unscale to recover pressure
