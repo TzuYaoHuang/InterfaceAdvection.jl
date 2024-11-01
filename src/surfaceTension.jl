@@ -7,7 +7,7 @@ The curvature is calculated on each momentum direction separately, consequently,
 """
 surfTen!(forcing,f::AbstractArray{T,D},α,n̂,fbuffer,η::Nothing;perdir=()) where {T,D} = nothing
 surfTen!(forcing,f::AbstractArray{T,D},α,n̂,fbuffer,η::Number;perdir=()) where {T,D} = for d∈1:D
-    @inside fbubber[I] = ϕ(d,I,f)
+    @inside fbuffer[I] = ϕ(d,I,f)
     BCf!(f;perdir)
     @loop containInterface(fbuffer[I]) ? getInterfaceNormal_WY!(f,n̂,I) : nothing over I∈inside(fbuffer)
     @loop forcing[I,d] += containInterface ? η*getCurvature(I,fbuffer,majorDir(n̂,I))*-∂(d,I,f) : T(0)  over I∈inside(fbuffer)

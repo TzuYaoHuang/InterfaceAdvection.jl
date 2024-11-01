@@ -69,7 +69,7 @@ getXYdir(i) = (sign(i)*((abs(i))%3+1),(abs(i)+1)%3+1)
 Get the major direction of reconstructed cell with +/- direction copied
 """
 function majorDir(n̂,I)
-    i = myargmax(n̂,I)
+    i = myArgAbsMax(n̂,I)
     return copysign(i,n̂[I,i])
 end
 
