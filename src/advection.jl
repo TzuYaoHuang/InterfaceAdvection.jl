@@ -3,14 +3,14 @@ import Random: shuffle
 
 
 """
-    advect!(a,c,f,u¹,u²)
+    advect!(a,c,f,u¹,u²,δt)
 
 This is the spirit of the operator-split cVOF calculation.
 It calculates the volume fraction after one fluxing.
 Volume fraction field `f` is being fluxed with the averaged of two velocity -- `u¹` and `u²`.
 """
-advect!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u) where {D} = advectVOF!(
-    f,c.fᶠ,c.α,c.n̂,u¹,u²,a.Δt[end],c.c̄, c.ρuf,c.λρ; perdir=a.perdir
+advect!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, δt=a.Δt[end]) where {D} = advectVOF!(
+    f,c.fᶠ,c.α,c.n̂,u¹,u²,δt,c.c̄, c.ρuf,c.λρ; perdir=a.perdir
 )
 
 """
