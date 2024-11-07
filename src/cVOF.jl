@@ -15,6 +15,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
     # field variable
     f  :: Sf  # volume fraction
     f⁰ :: Sf  # volume fraction for RK2 scheme
+    p  :: Sf  # pressure, wchich makes the pressure in a like pressure correction
     α  :: Sf  # intercept for PLIC
     n̂  :: Vf  # normal vector for PLIC
     fᶠ :: Sf  # store VOF flux
@@ -50,6 +51,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         α = zeros(T,Ng) |> arr
         n̂ = zeros(T,Nv) |> arr
         c̄ = zeros(Int8,Ng) |> arr
+        p = zeros(T,Ng) |> arr
 
         # Initialize variables
         applyVOF!(f,α,n̂,InterfaceSDF)
@@ -66,7 +68,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         μc = ifelse(μ==0,nothing,μ)
 
         new{D,T,typeof(f),typeof(n̂)}(
-            f, f⁰, α, n̂, fᶠ, c̄,
+            f, f⁰, p, α, n̂, fᶠ, c̄,
             ρu, ρuf,
             μc, λρ, λμ, ηc,
             perdir
