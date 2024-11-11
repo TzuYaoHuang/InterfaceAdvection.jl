@@ -4,16 +4,27 @@ import LinearAlgebra: ⋅
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
 @fastmath koren(u,c,d) = median((5c+2d-u)/6,c,median(2c-1u,c,d))
+@fastmath function korenTimeEffect(u,c,d,δl)
+    k = koren(u,c,d)
+    return c + (k-c)*(1-δl)
+end
 @fastmath cen(u,c,d) = (c+d)/2
 @inline ϕu(a,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuP(a,Ip,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuL(a,I,f,u,λ=koren) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuR(a,I,f,u,λ=koren) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
+@inline ϕnou(a,I,f,u,λ=koren) = @inbounds u>0 ? λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕnouP(a,Ip,I,f,u,λ=koren) = @inbounds u>0 ? λ(f[Ip],f[I-δ(a,I)],f[I]) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕnouL(a,I,f,u,λ=koren) = @inbounds u>0 ? ϕ(a,I,f) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕnouR(a,I,f,u,λ=koren) = @inbounds u<0 ? ϕ(a,I,f) : λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
+
 
 @fastmath function MPFMomStep!(a::Flow{D}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D}
     a.u⁰ .= a.u; c.f⁰ .= c.f
     # TODO: check if BC doable for ρu
+
+    ρcellStaggered!(c.ρuvw,c.f,c.λρ;perdir=c.perdir)
 
     # predictor u → u'
     U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
@@ -21,7 +32,7 @@ import LinearAlgebra: ⋅
     advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
+    MPFForcing!(a.f,a.u,c.ρuvw,c.ρu,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -42,7 +53,7 @@ import LinearAlgebra: ⋅
     # currently i use @. c.f = (c.f+c.f⁰)/2, should be fine for viscous flow but the sharpness of 
     # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
     # solver than one should actually use c.f⁰.
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
+    MPFForcing!(a.f,a.u,c.ρuvw,c.ρu,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
     updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -52,7 +63,7 @@ import LinearAlgebra: ⋅
 end
 
 # Forcing with the unit of ρu instead of u
-function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
+function MPFForcing!(r,u,ρuvw,ρu,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     N,D = size_u(u)
     r .= 0
 
@@ -63,13 +74,15 @@ function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     for i∈1:D, j∈1:D
         tagper = (j∈perdir)
         # treatment for bottom boundary with BCs
-        lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
+        lowerBoundary!(r,u,ρuvw,ρu,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
         # inner cells
-        @loop (Φ[I] = ϕu(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ);
+        @loop (Φ[I] = ϕ(i,CI(I,j),ρuf)*(
+                    ϕnou(j,CI(I,i),ρu,ϕ(i,CI(I,j),ρuf))/ϕnou(j,CI(I,i),ρuvw,ϕ(i,CI(I,j),ρuf))
+                ) - viscF(i,j,I,u,f,λμ,μ,λρ);
                 r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
         @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
         # treatment for upper boundary with BCs
-        upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
+        upperBoundary!(r,u,ρuvw,ρu,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
     end
 
     surfTen!(r,f,α,n̂,fbuffer,η;perdir)
@@ -81,13 +94,19 @@ end
 @inline viscF(i,j,I,u,f,λμ,μ::Nothing,λρ) = zero(eltype(f))
 
 # Neumann BC Building block
-lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
-upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) + viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
+lowerBoundary!(r,u,ρuvw,ρu,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += ϕ(i,CI(I,j),ρuf)*(
+        ϕnouL(j,CI(I,i),ρu,ϕ(i,CI(I,j),ρuf))/ϕnouL(j,CI(I,i),ρuvw,ϕ(i,CI(I,j),ρuf))
+    ) - viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
+upperBoundary!(r,u,ρuvw,ρu,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕ(i,CI(I,j),ρuf)*(
+        ϕnouR(j,CI(I,i),ρu,ϕ(i,CI(I,j),ρuf))/ϕnouR(j,CI(I,i),ρuvw,ϕ(i,CI(I,j),ρuf))
+    ) + viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
 
 # Periodic BC Building block
-lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
-    Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
-upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
+lowerBoundary!(r,u,ρuvw,ρu,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
+    Φ[I] = ϕ(i,CI(I,j),ρuf)*(
+            ϕnouP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),ρu,ϕ(i,CI(I,j),ρuf))/ϕnouP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),ρuvw,ϕ(i,CI(I,j),ρuf))
+        ) - viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
+upperBoundary!(r,u,ρuvw,ρu,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
 function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U)

@@ -158,3 +158,27 @@ end
 Convert volume flux `fᶠ` @ `I` to mash flux.
 """
 @inline @fastmath fᶠ2ρuf(I,fᶠ,δl,λρ) = δl*λρ + (1-λρ)*fᶠ[I]
+
+function ρcellStaggered!(ρuvw, f::AbstractArray{T,D}, λρ;perdir=()) where {T,D}
+    for d∈1:D
+        @loop ρuvw[I,d] = getρ(d,I,f,λρ) over I∈inside_uWB(size(f),d)
+    end
+    ρuvwBC!(ρuvw;perdir)
+end
+
+function ρuvwBC!(a;perdir=())
+    N,D = size_u(a)
+    for i∈ 1:D, j∈1:D
+        if j in perdir
+            @loop a[I,i] = a[CIj(j,I,N[j]-1),i] over I ∈ slice(N,1,j)
+            @loop a[I,i] = a[CIj(j,I,2),i] over I ∈ slice(N,N[j],j)
+        else
+            if i==j # Normal direction, Dirichlet
+                @loop a[I,i] = a[CIj(j,I,3),i] over I ∈ slice(N,1,j)
+            else    # Tangential directions, Neumann
+                @loop a[I,i] = a[I+δ(j,I),i] over I ∈ slice(N,1,j)
+                @loop a[I,i] = a[I-δ(j,I),i] over I ∈ slice(N,N[j],j)
+            end
+        end
+    end
+end
