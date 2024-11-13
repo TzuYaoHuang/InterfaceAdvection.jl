@@ -23,6 +23,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
     # Varable for energy-conserving scheme
     ρu :: Vf  # momentum
     ρuf:: Vf  # mass flux from VOF advection
+    uOld::Vf  
 
     # physical properties
     μ  :: Union{T,Nothing}   # store dynamcs viscosity of dark fluid (corresponding to ν)
@@ -60,6 +61,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         # Energy conserving
         ρu = zeros(T,Nv) |> arr
         ρuf= zeros(T,Nv) |> arr
+        uOld= zeros(T,Nv) |> arr
 
         # correct η
         ηc = ifelse(η==0,nothing,η)
@@ -67,7 +69,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
 
         new{D,T,typeof(f),typeof(n̂)}(
             f, f⁰, α, n̂, fᶠ, c̄,
-            ρu, ρuf,
+            ρu, ρuf, uOld,
             μc, λρ, λμ, ηc,
             perdir
         )

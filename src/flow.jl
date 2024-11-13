@@ -11,42 +11,33 @@ import LinearAlgebra: ⋅
 @inline ϕuR(a,I,f,u,λ=koren) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
 
-@fastmath function MPFMomStep!(a::Flow{D}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D}
+@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
     a.u⁰ .= a.u; c.f⁰ .= c.f
     # TODO: check if BC doable for ρu
 
     # predictor u → u'
-    U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
-    u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
-    advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
-    # TODO: include measure
-    a.μ₀ .= 1
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
-    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
-    updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
-    update!(b)
-    myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
-
-    # c.f .= c.f⁰
-    # a.u .= a.u⁰
-
-    # corrector u → u¹
-    U = BCTuple(a.U,a.Δt,D)
-    # recover ρu @ t = n since it is modified for the predictor step
-    u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
-    advect!(a,c,c.f,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
-    # TODO: include measure
-    a.μ₀ .= 1
-    @. a.u = (a.u+a.u⁰)/2
-    # TODO: think about which volume fraction should be applied for viscous and surface tneion terms
-    # currently i use @. c.f = (c.f+c.f⁰)/2, should be fine for viscous flow but the sharpness of 
-    # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
-    # solver than one should actually use c.f⁰.
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
-    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
-    updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
-    update!(b)
-    myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
+    error = 1
+    tol = 1000eps(T)
+    itmx = 100
+    iter = 0
+    c.uOld .= c.u
+    while (error>tol) && (iter<itmx)
+        c.f⁰ .= c.f
+        U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
+        u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
+        advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
+        # TODO: include measure
+        a.μ₀ .= 1
+        MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
+        updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+        updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
+        update!(b)
+        myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
+        iter += 1
+        @. c.uOld = abs(c.uOld-a.u)
+        error = maximum(uOld)
+        c.uOld .= a.u
+    end
 
     push!(a.Δt,min(MPCFL(a,c),1.5a.Δt[end]))
 end
