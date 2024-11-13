@@ -4,20 +4,21 @@ import LinearAlgebra: ⋅
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
 @fastmath koren(u,c,d) = median((5c+2d-u)/6,c,median(2c-1u,c,d))
+@fastmath minmod(u,c,d) = median(c,(3c-u)/2,(c+d)/2)
 @fastmath function korenTimeEffect(u,c,d,δl)
     k = koren(u,c,d)
     return c + (k-c)*(1-δl)
 end
 @fastmath cen(u,c,d) = (c+d)/2
-@inline ϕu(a,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕuP(a,Ip,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕuL(a,I,f,u,λ=koren) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕuR(a,I,f,u,λ=koren) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
+@inline ϕu(a,I,f,u,λ=minmod) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕuP(a,Ip,I,f,u,λ=minmod) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕuL(a,I,f,u,λ=minmod) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕuR(a,I,f,u,λ=minmod) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
-@inline ϕnou(a,I,f,u,λ=koren) = @inbounds u>0 ? λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕnouP(a,Ip,I,f,u,λ=koren) = @inbounds u>0 ? λ(f[Ip],f[I-δ(a,I)],f[I]) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕnouL(a,I,f,u,λ=koren) = @inbounds u>0 ? ϕ(a,I,f) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕnouR(a,I,f,u,λ=koren) = @inbounds u<0 ? ϕ(a,I,f) : λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
+@inline ϕnou(a,I,f,u,λ=minmod) = @inbounds u>0 ? λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕnouP(a,Ip,I,f,u,λ=minmod) = @inbounds u>0 ? λ(f[Ip],f[I-δ(a,I)],f[I]) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕnouL(a,I,f,u,λ=minmod) = @inbounds u>0 ? ϕ(a,I,f) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕnouR(a,I,f,u,λ=minmod) = @inbounds u<0 ? ϕ(a,I,f) : λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
 
 @fastmath function MPFMomStep!(a::Flow{D}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D}
