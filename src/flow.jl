@@ -17,27 +17,32 @@ import LinearAlgebra: ⋅
 
     # predictor u → u'
     error = 1
-    tol = 1000eps(T)
-    itmx = 100
+    tol = 500eps(T)
+    itmx = 1000
     iter = 0
-    c.uOld .= c.u
+    α = T(1)
+    c.uOld .= a.u
     while (error>tol) && (iter<itmx)
-        c.f⁰ .= c.f
-        U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
-        u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
-        advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
-        # TODO: include measure
+        c.f .= c.f⁰
+        U = BCTuple(a.U,a.Δt,D)
+        u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
+        advect!(a,c,c.f,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
         a.μ₀ .= 1
-        MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
-        updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
-        updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
+        MPFForcing!(a.f,a.u⁰,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
+        updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+        updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
         update!(b)
         myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
+
+        if iter > 1
+            @. a.u = α*a.u + (1-α)*c.uOld
+        end
         iter += 1
         @. c.uOld = abs(c.uOld-a.u)
-        error = maximum(uOld)
+        error = maximum(c.uOld)
         c.uOld .= a.u
     end
+    @printf("    error=%10.6e, iterations=%3d\n",error,iter); flush(stdout)
 
     push!(a.Δt,min(MPCFL(a,c),1.5a.Δt[end]))
 end
