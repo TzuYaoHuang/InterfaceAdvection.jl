@@ -5,6 +5,7 @@ import LinearAlgebra: ⋅
 # I need to re-define the flux limiter or else the TVD property cannot conserve
 @fastmath koren(u,c,d) = median((5c+2d-u)/6,c,median(2c-1u,c,d))
 @fastmath cen(u,c,d) = (c+d)/2
+@fastmath minmod(u,c,d) = median((3c-u)/2,c,(c+d)/2)
 @inline ϕu(a,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuP(a,Ip,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuL(a,I,f,u,λ=koren) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
