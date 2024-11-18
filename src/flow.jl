@@ -12,7 +12,7 @@ import LinearAlgebra: ⋅
 @inline ϕuR(a,I,f,u,λ=koren) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
 
-@fastmath function MPFMomStep!(a::Flow{D}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D}
+@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
     a.u⁰ .= a.u; c.f⁰ .= c.f
     # TODO: check if BC doable for ρu
 
@@ -23,7 +23,8 @@ import LinearAlgebra: ⋅
     # TODO: include measure
     a.μ₀ .= 1
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
-    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    @. c.f⁰ = (c.f⁰+c.f)/2
+    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U,T(1/2)); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
@@ -38,7 +39,7 @@ import LinearAlgebra: ⋅
     advect!(a,c,c.f,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
-    @. a.u = (a.u+a.u⁰)/2
+    # @. a.u = (a.u+a.u⁰)/2
     # TODO: think about which volume fraction should be applied for viscous and surface tneion terms
     # currently i use @. c.f = (c.f+c.f⁰)/2, should be fine for viscous flow but the sharpness of 
     # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
@@ -91,8 +92,8 @@ lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
 upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
-function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U)
-    @loop ρu[Ii] += forcing[Ii]*dt over Ii∈CartesianIndices(ρu)
+function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U,w=1)
+    @loop ρu[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
     forcing .= 0
     accelerate!(forcing,ΔtList,g,U)
