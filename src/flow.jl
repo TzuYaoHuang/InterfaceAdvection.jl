@@ -19,37 +19,48 @@ import LinearAlgebra: ⋅
 
     # predictor u → u'
     error = 1
-    tol = 500eps(Float32)
-    itmx = 1000
+    tol = 3e-4
+    itmx = 200
     iter = 0
-    α = T(1)
     c.uOld .= a.u
     while (error>tol) && (iter<itmx)
+        # iterate u @ time step n+1/2
         c.f .= c.f⁰
-        U = BCTuple(a.U,a.Δt,D)
-        u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
-        advect!(a,c,c.f,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
+        U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
+        u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
+        advect!(a,c,c.f,a.u,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
+        # TODO: include measure
         a.μ₀ .= 1
-        MPFForcing!(a.f,a.u⁰,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
-        updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+        @. c.f = (c.f⁰+c.f)/2
+        MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
+        updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U,T(1/2)); BC!(a.u,U,a.exitBC,a.perdir)
         updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
         update!(b)
         myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
 
-        if iter > 1
-            @. a.u = α*a.u + (1-α)*c.uOld
-        end
         iter += 1
-        @. c.uOld = abs(c.uOld-a.u)
-        error = maximum(c.uOld)
+        @. c.uOld = abs2(c.uOld-a.u)
+        error = sqrt(sum(c.uOld)/length(c.uOld))
         c.uOld .= a.u
     end
     @printf("    error=%10.6e, iterations=%3d\n",error,iter); flush(stdout)
 
+    c.f .= c.f⁰
+    U = BCTuple(a.U,a.Δt,D)
+    # recover ρu @ t = n since it is modified for the predictor step
+    u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
+    advect!(a,c,c.f,a.u,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
+    a.μ₀ .= 1
+    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
+    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
+    update!(b)
+    myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
+
     push!(a.Δt,min(MPCFL(a,c),1.5a.Δt[end]))
 end
 
-# Forcing with the unit of ρu instead of u
+# Forcing with the uenit of ρu instead of u
 function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     N,D = size_u(u)
     r .= 0
