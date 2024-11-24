@@ -38,6 +38,10 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄, ρuf,λρ;
         cleanWisp!(f,tol)
         BCf!(f;perdir)
     end
+    # NOTE: It is not necessary to remove the mass addition. This correction is useless and make explosion faster.
+    # @loop f[I] -= c̄[I]*(div(I,u)+div(I,u⁰))*δt/2 over I∈inside(f)
+    # cleanWisp!(f,tol)
+    # BCf!(f;perdir)
 end
 
 """
