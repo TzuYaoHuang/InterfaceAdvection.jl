@@ -1,4 +1,4 @@
-import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out
+import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer
 import LinearAlgebra: ⋅
 
 
@@ -51,7 +51,7 @@ import LinearAlgebra: ⋅
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
 
-    push!(a.Δt,min(MPCFL(a,c),1.5a.Δt[end]))
+    push!(a.Δt,min(MPCFL(a,c),1.2a.Δt[end]))
 end
 
 # Forcing with the unit of ρu instead of u
