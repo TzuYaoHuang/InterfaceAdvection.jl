@@ -11,16 +11,15 @@ import LinearAlgebra: ⋅
     α,β = c-u,d-c
     return c+max(α*β,0)*ifelse(α==β && α==0, 0, (α+β)/(α^2+β^2))/2
 end
-@fastmath cen(u,c,d) = (c+d)/2
 @inline ϕu(a,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuP(a,Ip,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuL(a,I,f,u,λ=koren) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuR(a,I,f,u,λ=koren) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
-@inline ϕnou(a,I,f,u,λ=minmod) = @inbounds u>0 ? λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕnouP(a,Ip,I,f,u,λ=minmod) = @inbounds u>0 ? λ(f[Ip],f[I-δ(a,I)],f[I]) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕnouL(a,I,f,u,λ=minmod) = @inbounds u>0 ? ϕ(a,I,f) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕnouR(a,I,f,u,λ=minmod) = @inbounds u<0 ? ϕ(a,I,f) : λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
+@inline ϕnou(a,I,f,u,λ=koren) = @inbounds u>0 ? λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕnouP(a,Ip,I,f,u,λ=koren) = @inbounds u>0 ? λ(f[Ip],f[I-δ(a,I)],f[I]) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕnouL(a,I,f,u,λ=koren) = @inbounds u>0 ? ϕ(a,I,f) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕnouR(a,I,f,u,λ=koren) = @inbounds u<0 ? ϕ(a,I,f) : λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
 
 @fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
