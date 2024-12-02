@@ -1,19 +1,21 @@
-import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out
+import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer
 import LinearAlgebra: ⋅
 
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
+@fastmath upwind(u,c,d) = c
+@fastmath cen(u,c,d) = (c+d)/2
+@fastmath minmod(u,c,d) = median((3c-u)/2,c,(c+d)/2)
 @fastmath koren(u,c,d) = median((5c+2d-u)/6,c,median(2c-1u,c,d))
-@fastmath minmod(u,c,d) = median(c,(3c-u)/2,(c+d)/2)
-@fastmath function korenTimeEffect(u,c,d,δl)
-    k = koren(u,c,d)
-    return c + (k-c)*(1-δl)
+@fastmath function vanAlbada1(u,c,d)
+    α,β = c-u,d-c
+    return c+max(α*β,0)*ifelse(α==β && α==0, 0, (α+β)/(α^2+β^2))/2
 end
 @fastmath cen(u,c,d) = (c+d)/2
-@inline ϕu(a,I,f,u,λ=minmod) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕuP(a,Ip,I,f,u,λ=minmod) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕuL(a,I,f,u,λ=minmod) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕuR(a,I,f,u,λ=minmod) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
+@inline ϕu(a,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕuP(a,Ip,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕuL(a,I,f,u,λ=koren) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕuR(a,I,f,u,λ=koren) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
 @inline ϕnou(a,I,f,u,λ=minmod) = @inbounds u>0 ? λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕnouP(a,Ip,I,f,u,λ=minmod) = @inbounds u>0 ? λ(f[Ip],f[I-δ(a,I)],f[I]) : λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
@@ -21,46 +23,52 @@ end
 @inline ϕnouR(a,I,f,u,λ=minmod) = @inbounds u<0 ? ϕ(a,I,f) : λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
 
-@fastmath function MPFMomStep!(a::Flow{D}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D}
+@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
     a.u⁰ .= a.u; c.f⁰ .= c.f
     # TODO: check if BC doable for ρu
 
     ρcellStaggered!(c.ρuvw,c.f,c.λρ;perdir=c.perdir)
 
-    # predictor u → u'
+    # predictor u(n) → u(n+1/2∘) with u(n)
+    dtCoeff = T(1/2)
     U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
     u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
     advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
+    @. c.f⁰ = (c.f⁰+c.f)/2
     MPFForcing!(a.f,a.u,c.ρuvw,c.ρu,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
-    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
-    myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
+    myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
 
     # c.f .= c.f⁰
     # a.u .= a.u⁰
 
-    # corrector u → u¹
+    ρcellStaggered!(c.ρuvw,c.f⁰,c.λρ;perdir=c.perdir)
+
+    # corrector u(n) → u(n+1) with u(n+1/2∘)
     U = BCTuple(a.U,a.Δt,D)
     # recover ρu @ t = n since it is modified for the predictor step
-    u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
-    advect!(a,c,c.f,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
+    u2ρu!(c.ρu,a.u,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
+    c.f⁰ .= c.f
+    advect!(a,c,c.f,a.u,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
-    @. a.u = (a.u+a.u⁰)/2
+    # @. a.u = (a.u+a.u⁰)/2
     # TODO: think about which volume fraction should be applied for viscous and surface tneion terms
     # currently i use @. c.f = (c.f+c.f⁰)/2, should be fine for viscous flow but the sharpness of 
     # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
     # solver than one should actually use c.f⁰.
     MPFForcing!(a.f,a.u,c.ρuvw,c.ρu,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
+    u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
     updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
 
-    push!(a.Δt,min(MPCFL(a,c),1.5a.Δt[end]))
+    push!(a.Δt,min(MPCFL(a,c),1.2a.Δt[end]))
 end
 
 # Forcing with the unit of ρu instead of u
@@ -110,8 +118,8 @@ lowerBoundary!(r,u,ρuvw,ρu,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
 upperBoundary!(r,u,ρuvw,ρu,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
-function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U)
-    @loop ρu[Ii] += forcing[Ii]*dt over Ii∈CartesianIndices(ρu)
+function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U,w=1)
+    @loop ρu[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
     forcing .= 0
     accelerate!(forcing,ΔtList,g,U)
