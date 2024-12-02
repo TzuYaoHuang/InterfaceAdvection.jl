@@ -158,3 +158,34 @@ end
 Convert volume flux `fᶠ` @ `I` to mash flux.
 """
 @inline @fastmath fᶠ2ρuf(I,fᶠ,δl,λρ) = δl*λρ + (1-λρ)*fᶠ[I]
+
+@inline @fastmath amean(ρold,ρnew) = (ρold+ρnew)/2
+@inline @fastmath gmean(ρold,ρnew) = √(ρold*ρnew)
+@inline @fastmath agratio(ρold,ρnew) = amean(ρold,ρnew)/gmean(ρold,ρnew)
+@inline checkMomCellInterfaceI(ρold,ρnew,θ=2) = ((ρnew<ρold) && (agratio(ρold,ρnew)>θ))
+@inline checkMomCellInterfaceI(d,I,fold,fnew,λρ,θ=2) = checkMomCellInterfaceI(
+    getρ(d,I,fold,λρ),getρ(d,I,fnew,λρ),θ
+)
+@inline function checkMomCellInterface!(ic,fold::AbstractArray{T,D},fnew,λρ,θ=2;perdir=()) where {T,D}
+    for d∈1:D
+        @loop ic[I,d] = checkMomCellInterfaceI(d,I,fold,fnew,λρ,θ) over I∈inside(fold)
+    end
+    ρuvwBC!(ic;perdir)
+end
+
+function ρuvwBC!(a;perdir=())
+    N,D = size_u(a)
+    for i∈ 1:D, j∈1:D
+        if j in perdir
+            @loop a[I,i] = a[CIj(j,I,N[j]-1),i] over I ∈ slice(N,1,j)
+            @loop a[I,i] = a[CIj(j,I,2),i] over I ∈ slice(N,N[j],j)
+        else
+            if i==j # Normal direction, Dirichlet
+                @loop a[I,i] = a[CIj(j,I,3),i] over I ∈ slice(N,1,j)
+            else    # Tangential directions, Neumann
+                @loop a[I,i] = a[I+δ(j,I),i] over I ∈ slice(N,1,j)
+                @loop a[I,i] = a[I-δ(j,I),i] over I ∈ slice(N,N[j],j)
+            end
+        end
+    end
+end

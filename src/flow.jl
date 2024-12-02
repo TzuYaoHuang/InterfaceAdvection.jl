@@ -17,6 +17,13 @@ end
 @inline ϕuL(a,I,f,u,λ=koren) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuR(a,I,f,u,λ=koren) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
+icCheck(a,I,u,ic) = @inbounds ((ic[I-δ(a,I)]==1) && (u>0)) || ((ic[I]==1) && (u<0))
+
+@inline ϕuIC(a,I,f,u,ic) = ifelse(icCheck(a,I,u,ic),ϕu(a,I,f,u,upwind),ϕu(a,I,f,u,koren))
+@inline ϕuPIC(a,Ip,I,f,u,ic) = ifelse(icCheck(a,I,u,ic),ϕuP(a,Ip,I,f,u,upwind),ϕuP(a,Ip,I,f,u,koren))
+@inline ϕuLIC(a,I,f,u,ic) = ifelse(icCheck(a,I,u,ic),ϕuL(a,I,f,u,upwind),ϕuL(a,I,f,u,koren))
+@inline ϕuRIC(a,I,f,u,ic) = ifelse(icCheck(a,I,u,ic),ϕuR(a,I,f,u,upwind),ϕuR(a,I,f,u,koren))
+
 
 @fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
     a.u⁰ .= a.u; c.f⁰ .= c.f
@@ -27,10 +34,11 @@ end
     U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
     u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
     advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
+    checkMomCellInterface!(c.ic,c.f,c.f⁰,c.λρ;perdir=a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
     @. c.f⁰ = (c.f⁰+c.f)/2
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
+    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η,c.ic;perdir=a.perdir)
     updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -43,7 +51,9 @@ end
     U = BCTuple(a.U,a.Δt,D)
     # recover ρu @ t = n since it is modified for the predictor step
     u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
+    c.f⁰ .= c.f
     advect!(a,c,c.f,a.u,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
+    checkMomCellInterface!(c.ic,c.f⁰,c.f,c.λρ;perdir=a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
     # @. a.u = (a.u+a.u⁰)/2
@@ -51,7 +61,7 @@ end
     # currently i use @. c.f = (c.f+c.f⁰)/2, should be fine for viscous flow but the sharpness of 
     # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
     # solver than one should actually use c.f⁰.
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
+    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η,c.ic;perdir=a.perdir) 
     updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -61,7 +71,7 @@ end
 end
 
 # Forcing with the unit of ρu instead of u
-function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
+function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η,ic;perdir=())
     N,D = size_u(u)
     r .= 0
 
@@ -72,13 +82,13 @@ function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     for i∈1:D, j∈1:D
         tagper = (j∈perdir)
         # treatment for bottom boundary with BCs
-        lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
+        lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,ic,Val{tagper}())
         # inner cells
-        @loop (Φ[I] = ϕu(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ);
+        @loop (Φ[I] = ϕuIC(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf),ic) - viscF(i,j,I,u,f,λμ,μ,λρ);
                 r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
         @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
         # treatment for upper boundary with BCs
-        upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
+        upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,ic,Val{tagper}())
     end
 
     surfTen!(r,f,α,n̂,fbuffer,η;perdir)
@@ -90,13 +100,13 @@ end
 @inline viscF(i,j,I,u,f,λμ,μ::Nothing,λρ) = zero(eltype(f))
 
 # Neumann BC Building block
-lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
-upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) + viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
+lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,ic,::Val{false}) = @loop r[I,i] += ϕuLIC(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf),ic) - viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
+upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,ic,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuRIC(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf),ic) + viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
 
 # Periodic BC Building block
-lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
-    Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
-upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
+lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,ic,::Val{true}) = @loop (
+    Φ[I] = ϕuPIC(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf),ic) - viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
+upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,ic,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
 function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U,w=1)

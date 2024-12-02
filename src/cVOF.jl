@@ -19,6 +19,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
     n̂  :: Vf  # normal vector for PLIC
     fᶠ :: Sf  # store VOF flux
     c̄  :: AbstractArray{Int8} # cell-centered indicator value for dilation term
+    ic :: AbstractArray{Int8}
 
     # Varable for energy-conserving scheme
     ρu :: Vf  # momentum
@@ -50,6 +51,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         α = zeros(T,Ng) |> arr
         n̂ = zeros(T,Nv) |> arr
         c̄ = zeros(Int8,Ng) |> arr
+        ic = zeros(Int8,Nv) |> arr
 
         # Initialize variables
         applyVOF!(f,α,n̂,InterfaceSDF)
@@ -66,7 +68,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         μc = ifelse(μ==0,nothing,μ)
 
         new{D,T,typeof(f),typeof(n̂)}(
-            f, f⁰, α, n̂, fᶠ, c̄,
+            f, f⁰, α, n̂, fᶠ, c̄, ic,
             ρu, ρuf,
             μc, λρ, λμ, ηc,
             perdir
