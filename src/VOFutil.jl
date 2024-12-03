@@ -166,7 +166,7 @@ Convert volume flux `fᶠ` @ `I` to mash flux.
 @inline checkMomCellInterfaceI(d,I,fold,fnew,λρ,θ=2) = checkMomCellInterfaceI(
     getρ(d,I,fold,λρ),getρ(d,I,fnew,λρ),θ
 )
-@inline function checkMomCellInterface!(ic,fold::AbstractArray{T,D},fnew,λρ,θ=2;perdir=()) where {T,D}
+@inline function checkMomCellInterface!(ic,fold::AbstractArray{T,D},fnew,λρ,θ=1.2;perdir=()) where {T,D}
     for d∈1:D
         @loop ic[I,d] = checkMomCellInterfaceI(d,I,fold,fnew,λρ,θ) over I∈inside(fold)
     end
