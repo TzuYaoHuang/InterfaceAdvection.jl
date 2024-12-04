@@ -23,18 +23,21 @@ This is the expanded function for `advect!`.
 function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄, ρuf,λρ; perdir=()) where {T,D}
     tol = 10eps(eltype(f))
 
-    δt = Δt/2
+    ρuf .= 0
 
     # get for dilation term
     @loop c̄[I] = ifelse(f[I]<0.5,0,1) over I ∈ CartesianIndices(f)
 
+    # Operator splitting to avoid bias
+    # Reference for splitting method: http://www.othmar-koch.org/splitting/index.php
     OpOrder = shuffle(1:D)
-    
-    ρuf .= 0
+    OpCoeff = D==2 ? SVector{4,T}(1-1/√2, 1/√2, 1-1/√2, 1/√2) : SVector{6,T}(1/2, 1-1/√2, 1/√2, 1-1/√2, 1/√2,1/2)
+    # OpCoeff = @SVector [T(1/2) for i = 1:2D]
 
-    # quasi-Strang splitting to avoid bias
     for iOp∈1:2D
-        d = OpOrder[ifelse(iOp<=D,iOp,abs(2D+1-iOp))]
+        d = OpOrder[ifelse(iOp<=D, iOp, 2D+1-iOp)]
+        δt = OpCoeff[iOp]*Δt
+
         # advect VOF field in d direction
         reconstructInterface!(f,α,n̂;perdir)
         getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d, ρuf,λρ)
