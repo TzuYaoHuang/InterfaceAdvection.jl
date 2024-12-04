@@ -162,11 +162,11 @@ Convert volume flux `fᶠ` @ `I` to mash flux.
 @inline @fastmath amean(ρold,ρnew) = (ρold+ρnew)/2
 @inline @fastmath gmean(ρold,ρnew) = √(ρold*ρnew)
 @inline @fastmath agratio(ρold,ρnew) = amean(ρold,ρnew)/gmean(ρold,ρnew)
-@inline checkMomCellInterfaceI(ρold,ρnew,θ=2) = ((ρnew<ρold) && (agratio(ρold,ρnew)>θ))
-@inline checkMomCellInterfaceI(d,I,fold,fnew,λρ,θ=2) = checkMomCellInterfaceI(
+@inline checkMomCellInterfaceI(ρold,ρnew,θ=1.1) = ((ρnew<ρold) && (agratio(ρold,ρnew)>θ))
+@inline checkMomCellInterfaceI(d,I,fold,fnew,λρ,θ=1.1) = checkMomCellInterfaceI(
     getρ(d,I,fold,λρ),getρ(d,I,fnew,λρ),θ
 )
-@inline function checkMomCellInterface!(ic,fold::AbstractArray{T,D},fnew,λρ,θ=1.2;perdir=()) where {T,D}
+@inline function checkMomCellInterface!(ic,fold::AbstractArray{T,D},fnew,λρ,θ=1.1;perdir=()) where {T,D}
     for d∈1:D
         @loop ic[I,d] = checkMomCellInterfaceI(d,I,fold,fnew,λρ,θ) over I∈inside(fold)
     end
