@@ -30,12 +30,13 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄, ρuf,λρ;
 
     # Operator splitting to avoid bias
     # Reference for splitting method: http://www.othmar-koch.org/splitting/index.php
-    OpOrder = shuffle(1:D)
-    OpCoeff = D==2 ? SVector{4,T}(1-1/√2, 1/√2, 1-1/√2, 1/√2) : SVector{6,T}(1/2, 1-1/√2, 1/√2, 1-1/√2, 1/√2,1/2)
-    # OpCoeff = @SVector [T(1/2) for i = 1:2D]
+    dirOrder = shuffle(1:D)
+    OpOrder = D==2 ? SVector{4,Int8}(1,2,1,2) : SVector{6,T}(1,2,3,2,3,1)
+    OpCoeff = D==2 ? SVector{4,T}(1-1/√2, 1/√2, 1/√2, 1-1/√2) : SVector{6,T}(1/2, 1-1/√2, 1/√2, 1/√2,1-1/√2, 1/2)
+    # OpCoeff = D==2 ? SVector{4,T}(1/2,1/2,1/2,1/2) : SVector{6,T}(1/2, 1/2,1/2,1/2,1/2,1/2)
 
     for iOp∈1:2D
-        d = OpOrder[ifelse(iOp<=D, iOp, 2D+1-iOp)]
+        d = dirOrder[OpOrder[iOp]]
         δt = OpCoeff[iOp]*Δt
 
         # advect VOF field in d direction
