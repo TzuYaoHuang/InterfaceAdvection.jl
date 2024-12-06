@@ -28,14 +28,21 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄, ρuf,λρ;
     # get for dilation term
     @loop c̄[I] = ifelse(f[I]<0.5,0,1) over I ∈ CartesianIndices(f)
 
+    dirOrder = shuffle(1:D)
     # Operator splitting to avoid bias
     # Reference for splitting method: http://www.othmar-koch.org/splitting/index.php
-    dirOrder = shuffle(1:D)
-    OpOrder = D==2 ? SVector{4,Int8}(1,2,1,2) : SVector{6,T}(1,2,3,2,3,1)
-    OpCoeff = D==2 ? SVector{4,T}(1-1/√2, 1/√2, 1/√2, 1-1/√2) : SVector{6,T}(1/2, 1-1/√2, 1/√2, 1/√2,1-1/√2, 1/2)
-    # OpCoeff = D==2 ? SVector{4,T}(1/2,1/2,1/2,1/2) : SVector{6,T}(1/2, 1/2,1/2,1/2,1/2,1/2)
+    # Second-order Auzinger-Ketcheson
+    s2 = 1/√2
+    OpOrder = D==2 ? SVector{4,Int8}(1, 2, 1, 2) : SVector{6,T}(1, 2, 3, 2, 3, 1)
+    OpCoeff = D==2 ? SVector{4,T}(1-s2, s2, s2, 1-s2) : SVector{6,T}(1/2, 1-s2, s2, s2, 1-s2, 1/2)
+    # Second-order Strang
+    # OpOrder = D==2 ? SVector{3,Int8}(1, 2, 1) : SVector{5,T}(1, 2, 3, 2, 1)
+    # OpCoeff = D==2 ? SVector{3,T}(1/2, 1, 1/2) : SVector{5,T}(1/2, 1/2, 1, 1/2, 1/2)
+    # First-order Lie-Trotter
+    # OpOrder = D==2 ? SVector{2,Int8}(1, 2) : SVector{3,T}(1, 2, 3)
+    # OpCoeff = D==2 ? SVector{2,T}(1, 1) : SVector{3,T}(1, 1, 1)
 
-    for iOp∈1:2D
+    for iOp∈eachindex(OpOrder)
         d = dirOrder[OpOrder[iOp]]
         δt = OpCoeff[iOp]*Δt
 
@@ -78,7 +85,6 @@ end
 function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace, ρuf,λρ) where {T,D}
     # if face velocity is zero
     if δl == 0
-        ρuf[IFace,d] += 0
         return nothing
     end
 
