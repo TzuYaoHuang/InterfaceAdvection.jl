@@ -32,15 +32,17 @@ icCheck(a,I,u,ic) = @inbounds ((ic[I-δ(a,I)]==1) && (u>0)) || ((ic[I]==1) && (u
     # predictor u(n) → u(n+1/2∘) with u(n)
     dtCoeff = T(1/2)
     U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
+    getρf!(c.ρf,c.f,c.λρ); ρuvwBC!(c.ρf;perdir=c.perdir)
     u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
     advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     checkMomCellInterface!(c.ic,c.f,c.f⁰,c.λρ;perdir=a.perdir)
+    advectρf!(c.ρf,c.ρuf,dtCoeff*δt;perdir=c.perdir)
     # TODO: include measure
     a.μ₀ .= 1
     @. c.f⁰ = (c.f⁰+c.f)/2
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η,c.ic;perdir=a.perdir)
-    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
-    updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
+    updateU!(a.u,c.ρu,c.ρf,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+    updateL!(a.μ₀,c.ρf,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
 
@@ -50,10 +52,12 @@ icCheck(a,I,u,ic) = @inbounds ((ic[I-δ(a,I)]==1) && (u>0)) || ((ic[I]==1) && (u
     # corrector u(n) → u(n+1) with u(n+1/2∘)
     U = BCTuple(a.U,a.Δt,D)
     # recover ρu @ t = n since it is modified for the predictor step
+    getρf!(c.ρf,c.f,c.λρ); ρuvwBC!(c.ρf;perdir=c.perdir)
     u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
     c.f⁰ .= c.f
     advect!(a,c,c.f,a.u,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     checkMomCellInterface!(c.ic,c.f⁰,c.f,c.λρ;perdir=a.perdir)
+    advectρf!(c.ρf,c.ρuf,δt;perdir=c.perdir)
     # TODO: include measure
     a.μ₀ .= 1
     # @. a.u = (a.u+a.u⁰)/2
@@ -62,8 +66,8 @@ icCheck(a,I,u,ic) = @inbounds ((ic[I-δ(a,I)]==1) && (u>0)) || ((ic[I]==1) && (u
     # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
     # solver than one should actually use c.f⁰.
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η,c.ic;perdir=a.perdir) 
-    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
-    updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
+    updateU!(a.u,c.ρu,c.ρf,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    updateL!(a.μ₀,c.ρf,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
 
@@ -109,17 +113,18 @@ lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,ic,::Val{true}) = @loop (
 upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,ic,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
-function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U,w=1)
+function updateU!(u,ρu,ρf,forcing,dt,f,λρ,ΔtList,g,U,w=1)
     @loop ρu[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(ρu)
-    ρu2u!(u,ρu,f,λρ)
+    # ρu2u!(u,ρu,f,λρ)
+    @loop u[Ii] = ρu[Ii]/ρf[Ii] over Ii∈CartesianIndices(ρu) 
     forcing .= 0
     accelerate!(forcing,ΔtList,g,U)
     @loop u[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(u)
 end
 
-function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
+function updateL!(μ₀,ρf,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
     for d∈1:D
-        @loop μ₀[I,d] /= getρ(d,I,f,λρ) over I∈inside(f)
+        @loop μ₀[I,d] /= ρf[I,d] over I∈inside(f)
     end
     BC!(μ₀,zeros(SVector{D,T}),false,perdir)
 end

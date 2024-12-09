@@ -46,6 +46,7 @@ a _vector_ array on face `j` with size `dims`. (WB stands for with boundaries.)
 function inside_uWB(dims::NTuple{D},j) where {D}
     CartesianIndices(ntuple( i-> i==j ? (2:dims[i]) : (2:dims[i]-1), D))
 end
+@inline inside(dims::NTuple{N}) where N = CartesianIndices(map(i->(2:i-1),dims))
 
 """
     δd(i,I)

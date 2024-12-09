@@ -152,6 +152,18 @@ u2ρu!(ρu,u,f,λρ) = @loop u2ρu!(ρu,u,f,λρ,I) over I∈inside(f)
     ρu[I,d] = u[I,d]*getρ(d,I,f,λρ)
 end
 
+@inline @fastmath getρf!(ρf,f::AbstractArray{T,D},λρ) where {T,D} = for d∈1:D
+    @loop ρf[I,d] = getρ(d,I,f,λρ) over I∈inside(f)
+end
+
+@inline @fastmath function advectρf!(ρf,ρuf,δt;perdir=())
+    N,D = size_u(ρf)
+    for d∈1:D,j∈1:D
+        @loop ρf[I,d] += δt*(ϕ(d,CI(I,j),ρuf)-ϕ(d,CI(I+δ(j,I),j),ρuf)) over I∈inside(N)
+    end
+    ρuvwBC!(ρf;perdir)
+end
+
 """
     fᶠ2ρuf(I,fᶠ,δl,λρ)
 
