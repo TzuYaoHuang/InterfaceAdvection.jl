@@ -1,4 +1,4 @@
-import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer
+import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞
 import LinearAlgebra: ⋅
 
 
@@ -23,6 +23,7 @@ end
     # TODO: check if BC doable for ρu
 
     # predictor u(n) → u(n+1/2∘) with u(n)
+    @log "p"
     dtCoeff = T(1/2)
     U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
     u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
@@ -40,6 +41,7 @@ end
     # a.u .= a.u⁰
 
     # corrector u(n) → u(n+1) with u(n+1/2∘)
+    @log "c"
     U = BCTuple(a.U,a.Δt,D)
     # recover ρu @ t = n since it is modified for the predictor step
     u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
@@ -149,6 +151,7 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
     @inside z[I] = ϵ[I] = r[I]*p.iD[I]
     insideI = inside(x) # [insideI]
     rho = r ⋅ z
+    @log ", $nᵖ, $(L∞(p)), $r₂\n"
     while (r₂>tol || (r₂>tol/4 && nᵖ==0)) && nᵖ<itmx
         # abs(rho)<10eps(eltype(z)) && break
         perBC!(ϵ,p.perdir)
@@ -165,17 +168,28 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
         rho = rho2
         r₂ = L₂(p)
         nᵖ+=1
+        @log ", $nᵖ, $(L∞(p)), $r₂\n"
     end
     perBC!(p.x,p.perdir)
 end
 
-function myproject!(a::Flow{n},b::AbstractPoisson,w=1) where n
+function myproject!(a::Flow{n,T},b::AbstractPoisson,w=1) where {n,T}
     dt = w*a.Δt[end]
-    b.z .= 0; b.ϵ .= 0; b.r .= 0
-    @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
-    psolver!(b)
+    inproject!(a,b,dt)
     for i ∈ 1:n  # apply solution and unscale to recover pressure
         @loop a.u[I,i] -= b.L[I,i]*∂(i,I,b.x) over I ∈ inside(b.x)
     end
     b.x ./= dt
+end
+
+@inline function inproject!(a::Flow{n,T},b::Poisson,dt) where {n,T}
+    b.z .= 0; b.ϵ .= 0; b.r .= 0
+    @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
+    psolver!(b;tol=50eps(T),itmx=1e3)
+end
+
+@inline function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
+    b.z .= 0; b.r .= 0
+    @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
+    solver!(b;tol=10000eps(T),itmx=1e3)
 end

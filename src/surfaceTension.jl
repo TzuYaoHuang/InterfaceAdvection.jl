@@ -8,9 +8,10 @@ The curvature is calculated on each momentum direction separately, consequently,
 surfTen!(forcing,f::AbstractArray{T,D},α,n̂,fbuffer,η::Nothing;perdir=()) where {T,D} = nothing
 surfTen!(forcing,f::AbstractArray{T,D},α,n̂,fbuffer,η::Number;perdir=()) where {T,D} = for d∈1:D
     @inside fbuffer[I] = ϕ(d,I,f)
+    # TODO: This did not take boundary shift into account, need revision.
     BCf!(f;perdir)
     @loop containInterface(fbuffer[I]) ? getInterfaceNormal_WY!(f,n̂,I) : nothing over I∈inside(fbuffer)
-    @loop forcing[I,d] += containInterface ? η*getCurvature(I,fbuffer,majorDir(n̂,I))*-∂(d,I,f) : T(0)  over I∈inside(fbuffer)
+    @loop forcing[I,d] += containInterface(fbuffer[I]) ? η*getCurvature(I,fbuffer,majorDir(n̂,I))*-∂(d,I,f) : T(0)  over I∈inside(fbuffer)
 end
 
 """
@@ -39,7 +40,7 @@ function getCurvature(I::CartesianIndex{3},f::AbstractArray{T,3},i;filter=T(0.2)
     Hxy= (H[3,3] + H[1,1] - H[3,1] - H[1,3])/4
     return (Hxx*(1+Hy^2) + Hyy*(1+Hx^2) - 2Hxy*Hx*Hy)/(1+Hx^2+Hy^2)^T(1.5)
 end
-function getCurvature(I::CartesianIndex{2},f::AbstractArray{T,2},i) where {T}
+function getCurvature(I::CartesianIndex{2},f::AbstractArray{T,2},i) where T
     ix = getXdir(i)
     H = @SArray [
         getPopinetHeight(I+xUnit*δd(ix,I),f,i)
