@@ -24,9 +24,11 @@ This function has been dispatched for 2D and 3D.
 function getCurvature(I::CartesianIndex{3},f::AbstractArray{T,3},i;filter=T(0.2)) where T
     ix,iy = getXYdir(i)
     H = @SMatrix [
-        getHeight(I+xUnit*δd(ix,I)+yUnit*δd(iy,I),f,i)
+        getPopinetHeight(I+xUnit*δd(ix,I)+yUnit*δd(iy,I),f,i)
         for xUnit∈-1:1,yUnit∈-1:1
     ]
+    Hx = (H[3,2] - H[1,2])/2
+    Hy = (H[2,3] - H[2,1])/2
     Hxx= (
             (H[3,2] + H[1,2] - 2*H[2,2]) + 
             (H[3,1] + H[1,1] - 2*H[2,1])*filter +
