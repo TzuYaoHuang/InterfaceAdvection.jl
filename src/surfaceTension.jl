@@ -9,8 +9,14 @@ surfTen!(forcing,f::AbstractArray{T,D},α,n̂,fbuffer,η::Nothing;perdir=()) whe
 surfTen!(forcing,f::AbstractArray{T,D},α,n̂,fbuffer,η::Number;perdir=()) where {T,D} = for d∈1:D
     @inside fbuffer[I] = ϕ(d,I,f)
     BCf!(d,fbuffer;perdir)
-    @loop containInterface(fbuffer[I]) ? getInterfaceNormal_WY!(f,n̂,I) : nothing over I∈inside(fbuffer)
-    @loop forcing[I,d] += containInterface(fbuffer[I]) ? η*getCurvature(I,fbuffer,majorDir(n̂,I))*-∂(d,I,f) : T(0)  over I∈inside(fbuffer)
+    @loop calNormal!(n̂,fbuffer,I) over I∈inside(fbuffer)
+    @loop applySurfTen!(forcing,fbuffer,n̂,d,I,f,η)  over I∈inside(fbuffer)
+end
+@inline calNormal!(n̂,fbuffer,I) = if containInterface(fbuffer[I]) 
+    getInterfaceNormal_WY!(fbuffer,n̂,I)
+end
+@inline applySurfTen!(forcing,fbuffer,n̂,d,I,f,η) = if containInterface(fbuffer[I]) 
+    forcing[I,d] += η*getCurvature(I,fbuffer,majorDir(n̂,I))*-∂(d,I,f)
 end
 
 """
