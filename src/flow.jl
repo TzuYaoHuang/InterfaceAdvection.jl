@@ -3,6 +3,7 @@ import LinearAlgebra: ⋅
 
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
+@inline ϕ(a,I,f) = @inbounds (f[I]+f[I-δ(a,I)])/2
 @fastmath upwind(u,c,d) = c
 @fastmath cen(u,c,d) = (c+d)/2
 @fastmath minmod(u,c,d) = median((3c-u)/2,c,(c+d)/2)

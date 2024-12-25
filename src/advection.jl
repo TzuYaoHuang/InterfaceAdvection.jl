@@ -33,7 +33,7 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄, ρuf,λρ;
     # Reference for splitting method: http://www.othmar-koch.org/splitting/index.php
     # Second-order Auzinger-Ketcheson
     s2 = 1/√2
-    OpOrder = D==2 ? SVector{4,Int8}(1, 2, 1, 2) : SVector{6,T}(1, 2, 3, 2, 3, 1)
+    OpOrder = D==2 ? SVector{4,Int8}(1, 2, 1, 2) : SVector{6,Int8}(1, 2, 3, 2, 3, 1)
     OpCoeff = D==2 ? SVector{4,T}(1-s2, s2, s2, 1-s2) : SVector{6,T}(1/2, 1-s2, s2, s2, 1-s2, 1/2)
     # Second-order Strang
     # OpOrder = D==2 ? SVector{3,Int8}(1, 2, 1) : SVector{5,T}(1, 2, 3, 2, 1)
