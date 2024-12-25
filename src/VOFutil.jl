@@ -65,6 +65,20 @@ function BCf!(f;perdir=())
         end
     end
 end
+function BCf!(d,f;perdir=())
+    N = size(f); D = length(N)
+    for j∈1:D
+        if j in perdir
+            @loop f[I] = f[CIj(j,I,N[j]-1)] over I ∈ slice(N,1,j)
+            @loop f[I] = f[CIj(j,I,2)] over I ∈ slice(N,N[j],j)
+        elseif j==d
+            @loop f[I] = f[I+2δ(j,I)] over I ∈ slice(N,1,j)
+        else
+            @loop f[I] = f[I+δ(j,I)] over I ∈ slice(N,1,j)
+            @loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j)
+        end
+    end
+end
 
 """
     cleanWisp!(f; tol)

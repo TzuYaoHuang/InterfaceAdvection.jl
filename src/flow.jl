@@ -1,12 +1,19 @@
-import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out
+import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞
 import LinearAlgebra: ⋅
 
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
-@fastmath koren(u,c,d) = median((5c+2d-u)/6,c,median(2c-1u,c,d))
+@inline ϕ(a,I,f) = @inbounds (f[I]+f[I-δ(a,I)])/2
+@fastmath upwind(u,c,d) = c
 @fastmath cen(u,c,d) = (c+d)/2
 @fastmath sou(u,c,d) = (3c-u)/2
 @fastmath minmod(u,c,d) = median((3c-u)/2,c,(c+d)/2)
+@fastmath koren(u,c,d) = median((5c+2d-u)/6,c,median(2c-1u,c,d))
+@fastmath function vanAlbada1(u,c,d)
+    α,β = c-u,d-c
+    return c+max(α*β,0)*ifelse(α==β && α==0, 0, (α+β)/(α^2+β^2))/2
+end
+
 @inline ϕu(a,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuP(a,Ip,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuL(a,I,f,u,λ=koren) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
@@ -57,7 +64,7 @@ import LinearAlgebra: ⋅
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
 
-    push!(a.Δt,min(MPCFL(a,c),1.5a.Δt[end]))
+    push!(a.Δt,min(MPCFL(a,c),1.2a.Δt[end]))
 end
 
 # Forcing with the uenit of ρu instead of u
@@ -104,7 +111,7 @@ function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U,w=1)
     ρu2u!(u,ρu,f,λρ)
     forcing .= 0
     accelerate!(forcing,ΔtList,g,U)
-    @loop u[Ii] += forcing[Ii]*dt over Ii∈CartesianIndices(u)
+    @loop u[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(u)
 end
 
 function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
@@ -149,7 +156,8 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
     @inside z[I] = ϵ[I] = r[I]*p.iD[I]
     insideI = inside(x) # [insideI]
     rho = r ⋅ z
-    while r₂!= 0 && (r₂>tol || nᵖ==0) && nᵖ<itmx
+    @log ", $nᵖ, $(L∞(p)), $r₂\n"
+    while (r₂>tol || (r₂>tol/4 && nᵖ==0)) && nᵖ<itmx
         # abs(rho)<10eps(eltype(z)) && break
         perBC!(ϵ,p.perdir)
         @inside z[I] = mult(I,p.L,p.D,ϵ)
@@ -165,17 +173,28 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
         rho = rho2
         r₂ = L₂(p)
         nᵖ+=1
+        @log ", $nᵖ, $(L∞(p)), $r₂\n"
     end
     perBC!(p.x,p.perdir)
 end
 
-function myproject!(a::Flow{n},b::AbstractPoisson,w=1) where n
+function myproject!(a::Flow{n,T},b::AbstractPoisson,w=1) where {n,T}
     dt = w*a.Δt[end]
-    b.z .= 0; b.ϵ .= 0; b.r .= 0
-    @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
-    psolver!(b)
+    inproject!(a,b,dt)
     for i ∈ 1:n  # apply solution and unscale to recover pressure
         @loop a.u[I,i] -= b.L[I,i]*∂(i,I,b.x) over I ∈ inside(b.x)
     end
     b.x ./= dt
+end
+
+@inline function inproject!(a::Flow{n,T},b::Poisson,dt) where {n,T}
+    b.z .= 0; b.ϵ .= 0; b.r .= 0
+    @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
+    psolver!(b;tol=50eps(T),itmx=1e3)
+end
+
+@inline function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
+    b.z .= 0; b.r .= 0
+    @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
+    solver!(b;tol=10000eps(T),itmx=1e3)
 end

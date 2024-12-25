@@ -20,14 +20,32 @@ This is the expanded function for `advect!`.
 `fᶠ` is where to store face flux in one direction.
 `c̄` is used to take care (de-)activation of dilation term.
 """
-function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄, ρuf,λρ; perdir=()) where {T,D}
+function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄, ρuf,λρ; perdir=()) where {T,D}
     tol = 10eps(eltype(f))
+
+    ρuf .= 0
 
     # get for dilation term
     @loop c̄[I] = ifelse(f[I]<0.5,0,1) over I ∈ CartesianIndices(f)
-    
-    # quasi-Strang splitting to avoid bias
-    for d∈shuffle(1:D)
+
+    dirOrder = shuffle(1:D)
+    # Operator splitting to avoid bias
+    # Reference for splitting method: http://www.othmar-koch.org/splitting/index.php
+    # Second-order Auzinger-Ketcheson
+    s2 = 1/√2
+    OpOrder = D==2 ? SVector{4,Int8}(1, 2, 1, 2) : SVector{6,Int8}(1, 2, 3, 2, 3, 1)
+    OpCoeff = D==2 ? SVector{4,T}(1-s2, s2, s2, 1-s2) : SVector{6,T}(1/2, 1-s2, s2, s2, 1-s2, 1/2)
+    # Second-order Strang
+    # OpOrder = D==2 ? SVector{3,Int8}(1, 2, 1) : SVector{5,T}(1, 2, 3, 2, 1)
+    # OpCoeff = D==2 ? SVector{3,T}(1/2, 1, 1/2) : SVector{5,T}(1/2, 1/2, 1, 1/2, 1/2)
+    # First-order Lie-Trotter
+    # OpOrder = D==2 ? SVector{2,Int8}(1, 2) : SVector{3,T}(1, 2, 3)
+    # OpCoeff = D==2 ? SVector{2,T}(1, 1) : SVector{3,T}(1, 1, 1)
+
+    for iOp∈eachindex(OpOrder)
+        d = dirOrder[OpOrder[iOp]]
+        δt = OpCoeff[iOp]*Δt
+
         # advect VOF field in d direction
         reconstructInterface!(f,α,n̂;perdir)
         getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d, ρuf,λρ)
@@ -39,7 +57,7 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄, ρuf,λρ;
         BCf!(f;perdir)
     end
     # NOTE: It is not necessary to remove the mass addition. This correction is useless and make explosion faster.
-    # @loop f[I] -= c̄[I]*(div(I,u)+div(I,u⁰))*δt/2 over I∈inside(f)
+    # @loop f[I] -= c̄[I]*(div(I,u)+div(I,u⁰))*Δt/2 over I∈inside(f)
     # cleanWisp!(f,tol)
     # BCf!(f;perdir)
 end
@@ -67,7 +85,6 @@ end
 function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace, ρuf,λρ) where {T,D}
     # if face velocity is zero
     if δl == 0
-        ρuf[IFace,d] = 0
         return nothing
     end
 
@@ -79,7 +96,7 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace, ρuf,λρ) w
     for ii∈1:D sumAbsNhat+= abs(n̂[ICell,ii]) end
     if sumAbsNhat==0 || fullorempty(f[ICell])
         fᶠ[IFace] = f[ICell]*δl
-        ρuf[IFace,d] = fᶠ2ρuf(IFace,fᶠ,δl,λρ)
+        ρuf[IFace,d] += fᶠ2ρuf(IFace,fᶠ,δl,λρ)
         return nothing
     end
 
@@ -87,7 +104,7 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace, ρuf,λρ) w
     a = ifelse(δl>0, α[ICell]-n̂[ICell,d]*(1-δl), α[ICell])
     n̂Cell = ntuple((ii)->n̂[ICell,ii]*ifelse(ii==d,abs(δl),1),D)
     fᶠ[IFace] = getVolumeFraction(n̂Cell, a)*δl
-    ρuf[IFace,d] = fᶠ2ρuf(IFace,fᶠ,δl,λρ)
+    ρuf[IFace,d] += fᶠ2ρuf(IFace,fᶠ,δl,λρ)
     return nothing
 end
 
