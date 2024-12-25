@@ -24,14 +24,15 @@ end
     a.u⁰ .= a.u; c.f⁰ .= c.f
     # TODO: check if BC doable for ρu
 
-    # predictor u → u'
     error = 1
     tol = 3e-4
     itmx = 200
     iter = 0
     c.uOld .= a.u
+    dtCoeff = T(1/2)
+
+    # iterate u @ time step n+1/2
     while (error>tol) && (iter<itmx)
-        # iterate u @ time step n+1/2
         c.f .= c.f⁰
         U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
         u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
@@ -40,10 +41,10 @@ end
         a.μ₀ .= 1
         @. c.f = (c.f⁰+c.f)/2
         MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
-        updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U,T(1/2)); BC!(a.u,U,a.exitBC,a.perdir)
+        updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
         updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
         update!(b)
-        myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
+        myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
 
         iter += 1
         @. c.uOld = abs2(c.uOld-a.u)
