@@ -21,15 +21,16 @@ end
 
 
 @fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
-    a.u⁰ .= a.u; c.f⁰ .= c.f
+    a.u⁰ .= a.u; c.f⁰ .= c.f; c.uOld .= a.u⁰
     # TODO: check if BC doable for ρu
 
     error = 1
-    tol = 3e-4
+    tol = 1e-4
     itmx = 200
     iter = 0
     c.uOld .= a.u
     dtCoeff = T(1/2)
+    θ = T(0.2)
 
     # iterate u @ time step n+1/2
     while (error>tol) && (iter<itmx)
@@ -39,14 +40,16 @@ end
         advect!(a,c,c.f,a.u,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
         # TODO: include measure
         a.μ₀ .= 1
-        @. c.f = (c.f⁰+c.f)/2
         MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
-        updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+        updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+        symplecticU!(a.u,a.u⁰,a.u,c.f⁰,c.f,c.λρ); BC!(a.u,U,a.exitBC,a.perdir)
+        @. c.f = (c.f⁰+c.f)/2
         updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
         update!(b)
         myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
 
         iter += 1
+        @. a.u = (1-θ)*c.uOld + θ*a.u
         @. c.uOld = abs2(c.uOld-a.u)
         error = sqrt(sum(c.uOld)/length(c.uOld))
         c.uOld .= a.u
@@ -113,6 +116,23 @@ function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U,w=1)
     forcing .= 0
     accelerate!(forcing,ΔtList,g,U)
     @loop u[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(u)
+end
+
+function symplecticU!(uSym,uold,unew,fold::AbstractArray{T,D},fnew,λρ) where {T,D}
+    for d∈1:D
+        @loop symplecticU!(uSym,uold,unew,fold,fnew,λρ,I,d) over I∈inside(fold)
+    end
+end
+
+function symplecticU!(uSym,uold,unew,fold::AbstractArray{T,D},fnew,λρ,I,d) where {T,D}
+    ρold = getρ(d,I,fold,λρ)
+    ρnew = getρ(d,I,fnew,λρ)
+    Δρ = ρnew - ρold
+    if abs(Δρ) < 50eps(T)
+        uSym[I,d] = (uold[I,d]+unew[I,d])/2
+        return nothing
+    end
+    uSym[I,d] = (ρnew*unew[I,d]-ρold*uold[I,d]-sqrt(ρnew*ρold)*(unew[I,d]-uold[I,d]))/Δρ
 end
 
 function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
