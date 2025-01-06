@@ -4,10 +4,10 @@
 
 Return where is the absolute maximum since the original `argmax` function in julia is not working in GPU environment.
 """
-function myArgAbsMax(vec)
-    max = abs2(vec[1])
+function myArgAbsMax(vec::AbstractArray{T,D}) where {T,D}
+    max = T(0)
     iMax = 1
-    for i∈2:length(vec)
+    for i∈eachindex(vec)
         cur = abs2(vec[i])
         if cur > max
             max = cur
