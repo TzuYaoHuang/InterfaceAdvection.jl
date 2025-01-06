@@ -43,10 +43,3 @@ This function take multiphase into account so as the staggered arragement.
 ρuI(i,I::CartesianIndex{D},u,f,λρ,U=fSV(zero,D)) where D = begin
     0.5(u[I,i]+u[I+δ(i,I),i]-2U[i])*getρ(I,f,λρ)
 end
-
-"""
-    getAnotherDir(d,n)
-
-Given `1:n` directions, return tuple that exclude direction `d`.
-"""
-getAnotherDir(d,n) = filter(i-> i≠d,(1:n...,))
