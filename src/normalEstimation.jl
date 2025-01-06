@@ -49,7 +49,7 @@ function getInterfaceNormal_WY!(f::AbstractArray{T,D},n̂,I) where {T,D}
         hr = get3CellHeight(f,I+δ(d,I),dominantDir)
 
         # general case
-        n̂[I,d] = (hl-hr)*0.5
+        n̂[I,d] = (hl-hr)/2
 
         # Too steep
         n̂[I,d] = ifelse(
@@ -73,4 +73,15 @@ function getInterfaceNormal_PCD!(f::AbstractArray{T,D},n̂,I) where {T,D}
     for d∈1:D
         n̂[I,d] = f[I-δ(d,I)]-f[I+δ(d,I)]
     end
+end
+
+"""
+    getInterfaceNormal_SLIC!f,n̂,I)
+
+Normal reconstructure scheme for pure vertical or horizontal surfaces. on-off based on result from PCD.
+"""
+function getInterfaceNormal_SLIC!(f::AbstractArray{T,D},n̂,I) where {T,D}
+    getInterfaceNormal_PCD!(f,n̂,I)
+    d = myArgAbsMax(n̂,I)
+    for i∈1:D n̂[I,i] = ifelse(i==d,sign(n̂[I,i]),T(0)) end
 end
