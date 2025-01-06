@@ -110,6 +110,29 @@ end
     @test ρuf[Ic+δ(d,Ic),d] ≈ 0.256
 end
 
+@testset "surfaceTension.jl" begin
+    f = [0.3 0.2 0.1 0.1 0.2 0.3 0.0 0.0;
+        1.0 1.0 0.6 0.5 0.3 0.2 0.0 0.0;
+        0.0 0.0 0.0 0.1 0.0 0.0 0.0 0.0]
+    @test getPopinetHeight(CartesianIndex(1,5),f,2) == -0.3
+    @test getPopinetHeight(CartesianIndex(2,5),f,2) == -0.9
+    @test getPopinetHeight(CartesianIndex(3,5),f,2) == -1.4
+    @test getCurvature(CartesianIndex(2,5),f,2) ≈ 0.0672718547928328
+    # NOTE: 3D?
+end
+
+@testset "flow.jl" begin
+    # TODO
+end
+
+@testset "cVOF.jl" begin
+    # TODO
+end
+
 @testset "InterfaceAdvection.jl" begin
     # Write your tests here.
+end
+
+@testset "metrics.jl" begin
+    # TODO
 end
