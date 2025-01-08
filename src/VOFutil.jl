@@ -12,11 +12,11 @@ function applyVOF!(f,α,n̂,InterfaceSDF)
     cleanWisp!(f)
 end
 @inline function applyVOF!(f::AbstractArray{T,D},α::AbstractArray{T,D},n̂::AbstractArray{T,Dv},InterfaceSDF,I) where {T,D,Dv}
-    # forwarddiff cause some problem so using finite diff
-    δd = T(0.01)
+    # forwardDiff cause some problem so using finite difference
+    Δd = T(0.01)
     for i∈1:D
-        xyzpδ = SVector{D,T}(loc(0,I) .+δd .*δ(i,I).I)
-        xyzmδ = SVector{D,T}(loc(0,I) .-δd .*δ(i,I).I)
+        xyzpδ = SVector{D,T}(loc(0,I) .+Δd .*δ(i,I).I)
+        xyzmδ = SVector{D,T}(loc(0,I) .-Δd .*δ(i,I).I)
         n̂[I,i] = InterfaceSDF(xyzpδ) - InterfaceSDF(xyzmδ)
     end
     sumN2 = 0; for i∈1:D sumN2+= n̂[I,i]^2 end
@@ -37,7 +37,6 @@ function BCVOF!(f,α,n̂;perdir=())
     N,D = size_u(n̂)
     for j∈1:D
         if j in perdir
-            # TODO: can we merge f,α,n̂ together?
             @loop fαn̂!(f,α,n̂, I,j,N[j]-1) over I ∈ slice(N,1,j)
             @loop fαn̂!(f,α,n̂, I,j,2) over I ∈ slice(N,N[j],j)
         else
@@ -53,6 +52,7 @@ function fαn̂!(f::AbstractArray{T,D},α,n̂, I,j,ii) where {T,D}
     end
     α[I] = α[CIj(j,I,ii)]
 end
+
 function BCf!(f;perdir=())
     N = size(f); D = length(N)
     for j∈1:D
@@ -86,8 +86,8 @@ end
 Clean out values in `f` too close to 0 or 1. The margin is 10 times the resolution of float type `T`.
 """
 function cleanWisp!(f::AbstractArray{T,D}, tol=10eps(T)) where {T,D}
-    @loop f[I] = ifelse(f[I]<       tol, T(0), f[I]) over I∈inside(f)
-    @loop f[I] = ifelse(f[I]>one(T)-tol, T(1), f[I]) over I∈inside(f)
+    @loop f[I] = ifelse(f[I]<  tol, T(0), f[I]) over I∈inside(f)
+    @loop f[I] = ifelse(f[I]>1-tol, T(1), f[I]) over I∈inside(f)
 end
 
 
@@ -121,8 +121,7 @@ The property of dark fluid is assumed to be 1, but can be specified with the thi
 @inline @fastmath linInterpProp(f,λ,base=one(eltype(f))) = base*(λ + (1-λ)*f)
 
 """
-    getρ(I,f,λρ)
-    getρ(d,I,f,λρ)
+    getρ([d,]I,f,λρ)
 
 Linearly interpolate density at either `I` or `I-0.5d`.
 """
@@ -130,7 +129,7 @@ Linearly interpolate density at either `I` or `I-0.5d`.
 @inline @fastmath getρ(d,I,f,λρ) = linInterpProp(ϕ(d,I,f),λρ)
 
 """
-    getμ(IJEQUAL,i,j,I,f::AbstractArray{T,D},λμ,μ,λρ)
+    getμ(i,j,I,f,λμ,μ,λρ)
 
 Calculate the viscosity corresponding to the term ∂ⱼuᵢ @ either `I-0.5i-0.5j` or `I-1i`.
 The function return the linear interpolation at cell center (when `i==j`) or cell vertex (when `i≠j`).
@@ -147,7 +146,7 @@ The dynamic viscosity is then recovered using the minimal density of the cells w
 end
 
 """
-    ρu2u!(u,ρu,f,λρ)
+    ρu2u!(u,ρu,f,λρ[,I])
 
 Convert mass flux `ρu` to velocity `u` at the corresponding momentum cell.
 """
@@ -157,7 +156,7 @@ Convert mass flux `ρu` to velocity `u` at the corresponding momentum cell.
 end
 
 """
-    ρu2u!(u,ρu,f,λρ)
+    u2ρu!(ρu,u,f,λρ[,I])
 
 Convert velocity `u` to mass flux `ρu` at the corresponding momentum cell.
 """

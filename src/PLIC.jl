@@ -2,8 +2,7 @@
 """
     getIntercept(v, g)
     getIntercept(n̂, I, g)
-    getIntercept(n1, n2, g)
-    getIntercept(n1, n2, n3, g)
+    getIntercept(n1, n2[, n3], g)
 
 Calculate intercept from volume fraction.
 These functions prepare `n̂` and `g` for `f2α`.
@@ -42,8 +41,7 @@ end
 """
     getVolumeFraction(v, b)
     getVolumeFraction(n̂, I, b)
-    getVolumeFraction(n1, n2, b)
-    getVolumeFraction(n1, n2, n3, b)
+    getVolumeFraction(n1, n2[, n3], b)
 
 Calculate volume fraction from intercept.
 These functions prepare `n̂` and `b` for `α2f`.
@@ -84,8 +82,7 @@ end
 end
 
 """
-    α2f(m1, m2, a)
-    α2f(m1, m2, m3, a)
+    α2f(m1, m2[, m3], a)
 
 Two/Three-Dimensional Forward Problem.
 Get volume fraction from intersection.
@@ -110,8 +107,7 @@ Following algorithm proposed by [Scardovelli & Zaleski (2000)](https://doi.org/1
 end
 
 """
-    f2α(m1, m2, v)
-    f2α(m1, m2, m3, v)
+    f2α(m1, m2[, m3], v)
 
 Two/Three-Dimensional Inverse Problem.
 Get intercept with volume fraction.

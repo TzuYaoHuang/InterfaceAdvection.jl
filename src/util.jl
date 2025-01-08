@@ -16,10 +16,10 @@ function myArgAbsMax(vec::AbstractArray{T,D}) where {T,D}
     end
     return iMax
 end
-function myArgAbsMax(vec,I)
-    max = abs2(vec[I,1])
+function myArgAbsMax(vec,I::CartesianIndex{D}) where D
+    max = T(0)
     iMax = 1
-    for i∈2:size(vec)[end]
+    for i∈1:D
         cur = abs2(vec[I,i])
         if cur > max
             max = cur
@@ -35,7 +35,7 @@ end
 Return 3 surrunding cells in each direction of `I`, including diagonal ones.
 The return grid number adds up to 3ᴰ 
 """
-boxAroundI(I::CartesianIndex{D}) where D = (I-oneunit(I)):(I+oneunit(I))
+boxAroundI(I) = (I-oneunit(I)):(I+oneunit(I))
 
 """
     inside_uWB(dims,j)

@@ -36,7 +36,7 @@ include("metrics.jl")
                         λμ=1e-2,λρ=1e-3,η=0,
                         InterfaceSDF::Function=(x) -> -5-x[1],
                         uλ=nothing, exitBC=false, body::AbstractBody=NoBody(),
-                        T=Float32, mem=Array)
+                        T=Float64, mem=Array)
 
 Constructor for a WaterLily.jl two phase simulation, which is identical to the original on with some additional properties for multiphase flow:
 

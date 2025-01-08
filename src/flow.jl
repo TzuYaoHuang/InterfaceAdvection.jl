@@ -1,9 +1,8 @@
 import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞
 import LinearAlgebra: ⋅
 
-
-# I need to re-define the flux limiter or else the TVD property cannot conserve
 @inline ϕ(a,I,f) = @inbounds (f[I]+f[I-δ(a,I)])/2
+# I need to re-define the flux limiter or else the TVD property cannot conserve
 @fastmath upwind(u,c,d) = c
 @fastmath cen(u,c,d) = (c+d)/2
 @fastmath minmod(u,c,d) = median((3c-u)/2,c,(c+d)/2)
@@ -26,14 +25,15 @@ end
     # predictor u(n) → u(n+1/2∘) with u(n)
     @log "p"
     dtCoeff = T(1/2)
-    U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
+    dtList = @view(a.Δt[1:end-1])
+    U = BCTuple(a.U,dtList,D)
     u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
     advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
     @. c.f⁰ = (c.f⁰+c.f)/2
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
-    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
@@ -49,11 +49,8 @@ end
     advect!(a,c,c.f,a.u,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
-    # @. a.u = (a.u+a.u⁰)/2
-    # TODO: think about which volume fraction should be applied for viscous and surface tneion terms
-    # currently i use @. c.f = (c.f+c.f⁰)/2, should be fine for viscous flow but the sharpness of 
-    # interface cannot be retain for surface tension calculation. If need to be consistent with pressure
-    # solver than one should actually use c.f⁰.
+    # TODO: viscous term and surface tension term should be evaluated 
+    # at the end of time step to avoid divide by wrong ρ
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
     updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
@@ -68,8 +65,8 @@ function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     N,D = size_u(u)
     r .= 0
 
-    # i is velocity direction
-    # j is face direction (differential)
+    # i is velocity direction (uᵢ)
+    # j is face direction (differential) (∂ⱼ)
     # calculate the lower boundary for each momentum cell then use it to help the previous cell
     # Lower boundary of the I cell is the upper boundary of I-1 cell.
     for i∈1:D, j∈1:D
@@ -88,7 +85,6 @@ function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
 end
 
 # Viscous forcing overload
-# TODO: possiblity to use Val?
 @inline viscF(i,j,I,u,f,λμ,μ::Number,λρ) = (i==j ? getμCell(i,j,I,f,λμ,μ,λρ) : getμEdge(i,j,I,f,λμ,μ,λρ)) *(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
 @inline viscF(i,j,I,u,f,λμ,μ::Nothing,λρ) = zero(eltype(f))
 
@@ -150,14 +146,13 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
     nᵖ=0
     x,r,ϵ,z = p.x,p.r,p.ϵ,p.z
     @inside z[I] = ϵ[I] = r[I]*p.iD[I]
-    insideI = inside(x) # [insideI]
+    insideI = inside(x)
     rho = r ⋅ z
     @log ", $nᵖ, $(L∞(p)), $r₂\n"
     while (r₂>tol || (r₂>tol/4 && nᵖ==0)) && nᵖ<itmx
         # abs(rho)<10eps(eltype(z)) && break
         perBC!(ϵ,p.perdir)
         @inside z[I] = mult(I,p.L,p.D,ϵ)
-        # views does not work with inner product super well.
         # TODO: add view back when the next version of CUDA is out
         alpha = rho/(z[insideI]⋅ϵ[insideI]) 
         @loop (x[I] += alpha*ϵ[I];
