@@ -3,24 +3,25 @@ import Random: shuffle
 
 
 """
-    advect!(a,c,f,u¹,u²)
+    advect!(a,c,f,u¹,u²,dt)
 
 This is the spirit of the operator-split cVOF calculation.
-It calculates the volume fraction after one fluxing.
+It calculates the volume fraction after one full time step.
 Volume fraction field `f` is being fluxed with the averaged of two velocity -- `u¹` and `u²`.
 """
-advect!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u) where {D} = advectVOF!(
-    f,c.fᶠ,c.α,c.n̂,u¹,u²,a.Δt[end],c.c̄, c.ρuf,c.λρ; perdir=a.perdir
+advect!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, dt=a.Δt[end]) where {D} = advectVOF!(
+    f,c.fᶠ,c.α,c.n̂,u¹,u²,dt,c.c̄,c.ρuf,c.λρ; perdir=a.perdir
 )
 
 """
-    advectVOF!(f,fᶠ,α,n̂,u,u⁰,δt,c̄; perdir)
+    advectVOF!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ; perdir)
 
 This is the expanded function for `advect!`. 
 `fᶠ` is where to store face flux in one direction.
 `c̄` is used to take care (de-)activation of dilation term.
+`ρuf` stores the mass flux for mass-momentum consistent method.
 """
-function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄, ρuf,λρ; perdir=()) where {T,D}
+function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; perdir=()) where {T,D}
     tol = 10eps(eltype(f))
 
     ρuf .= 0
@@ -29,15 +30,19 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄, ρuf,λρ;
     @loop c̄[I] = ifelse(f[I]<0.5,0,1) over I ∈ CartesianIndices(f)
 
     dirOrder = shuffle(1:D)
+
     # Operator splitting to avoid bias
     # Reference for splitting method: http://www.othmar-koch.org/splitting/index.php
+
     # Second-order Auzinger-Ketcheson
     s2 = 1/√2
     OpOrder = D==2 ? SVector{4,Int8}(1, 2, 1, 2) : SVector{6,Int8}(1, 2, 3, 2, 3, 1)
     OpCoeff = D==2 ? SVector{4,T}(1-s2, s2, s2, 1-s2) : SVector{6,T}(1/2, 1-s2, s2, s2, 1-s2, 1/2)
+
     # Second-order Strang
     # OpOrder = D==2 ? SVector{3,Int8}(1, 2, 1) : SVector{5,T}(1, 2, 3, 2, 1)
     # OpCoeff = D==2 ? SVector{3,T}(1/2, 1, 1/2) : SVector{5,T}(1/2, 1/2, 1, 1/2, 1/2)
+
     # First-order Lie-Trotter
     # OpOrder = D==2 ? SVector{2,Int8}(1, 2) : SVector{3,T}(1, 2, 3)
     # OpCoeff = D==2 ? SVector{2,T}(1, 1) : SVector{3,T}(1, 1, 1)
@@ -48,7 +53,7 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄, ρuf,λρ;
 
         # advect VOF field in d direction
         reconstructInterface!(f,α,n̂;perdir)
-        getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d, ρuf,λρ)
+        getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
         @loop f[I] += fᶠ[I]-fᶠ[I+δ(d,I)] + c̄[I]*(∂(d,I,u)+∂(d,I,u⁰))*δt/2 over I∈inside(f)
 
         reportFillError(f,u,u⁰,δt,d,tol)
@@ -63,8 +68,8 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄, ρuf,λρ;
 end
 
 """
-    getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d)
-    getVOFFlux!(fᶠ,f,α,n̂,δl,d,IFace)
+    getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
+    getVOFFlux!(fᶠ,f,α,n̂,δl,d,IFace,ρuf,λρ)
 
 Get the face flux according to upwind donor-acceptor cell concept. 
 The reconstructed dark fluid volume orverlapped with the advection sweep volume is advected to the next cell. 
@@ -76,13 +81,15 @@ The reconstructed dark fluid volume orverlapped with the advection sweep volume 
 - `δt`: time step size
 - `δl`: advection sweep length, essentially `uδt`
 - `d`: the direction of cell faces that flux is calculated at
+- `ρuf`: mass flux of collocated faces
+- `λρ`: density ratio
 """
-function getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d, ρuf,λρ)
+function getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
     fᶠ .= 0
     @loop getVOFFlux!(fᶠ,f,α,n̂,δt/2*(u[IFace,d]+u⁰[IFace,d]),d,IFace, ρuf,λρ) over IFace∈inside_uWB(size(f),d)
     # 👿🤬 do not FUCKING put `ρuf ./= δt` here or else the second direction will be devided twice and make simulation explode
 end
-function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace, ρuf,λρ) where {T,D}
+function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace,ρuf,λρ) where {T,D}
     # if face velocity is zero
     if δl == 0
         return nothing

@@ -22,7 +22,7 @@ include("advection.jl")
 export advect!,advectVOF!,getVOFFlux!
 
 include("surfaceTension.jl")
-surfTen!,getCurvature,getPopinetHeight
+export surfTen!,getCurvature,getPopinetHeight
 
 include("flow.jl")
 export MPFMomStep!
@@ -36,7 +36,7 @@ include("metrics.jl")
                         λμ=1e-2,λρ=1e-3,η=0,
                         InterfaceSDF::Function=(x) -> -5-x[1],
                         uλ=nothing, exitBC=false, body::AbstractBody=NoBody(),
-                        T=Float32, mem=Array)
+                        T=Float64, mem=Array)
 
 Constructor for a WaterLily.jl two phase simulation, which is identical to the original on with some additional properties for multiphase flow:
 
@@ -62,7 +62,7 @@ Constructor for a WaterLily.jl two phase simulation, which is identical to the o
 
 See files in `examples` folder for examples.
 """
-mutable struct TwoPhaseSimulation
+mutable struct TwoPhaseSimulation <: AbstractSimulation
     U :: Number # velocity scale
     L :: Number # length scale
     ϵ :: Number # kernel width
@@ -92,10 +92,6 @@ end
 
 export TwoPhaseSimulation
 
-# overload for time
-time(sim::TwoPhaseSimulation) = WaterLily.time(sim.flow)
-sim_time(sim::TwoPhaseSimulation) = time(sim)*sim.U/sim.L
-
 # overload for simStep
 # TODO: support BDIM body
 function sim_step!(sim::TwoPhaseSimulation,t_end;remeasure=false,max_steps=typemax(Int),verbose=false)
@@ -111,7 +107,7 @@ function sim_step!(sim::TwoPhaseSimulation;remeasure=false)
     MPFMomStep!(sim.flow,sim.pois,sim.intf,sim.body)
 end
 
-export time,sim_time,sim_step!
+export sim_step!
 
 # Backward compatibility for extensions
 if !isdefined(Base, :get_extension)

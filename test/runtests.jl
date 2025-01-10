@@ -4,6 +4,27 @@ using StaticArrays
 
 using Test
 
+
+@testset "util.jl" begin
+    import InterfaceAdvection: myArgAbsMax,δd,getXdir,getXYdir
+    @test myArgAbsMax(SA[1/2, -2/3, 1/3]) == 2
+    @test myArgAbsMax(SA[1/2  -2/3  1/3],CartesianIndex(1)) == 2
+
+    I = CartesianIndex((1,1,1))
+    @test δd(2,I) == CartesianIndex((0,1,0))
+    @test δd(-3,I) == CartesianIndex((0,0,-1))
+
+    @test getXdir(2) == 1
+    @test getXdir(-1) == 2
+    @test getXdir(-2) == -1
+    @test getXdir(1) == -2
+
+    @test getXYdir(3) == (1,2)
+    @test getXYdir(-3) == (-1,2)
+    @test getXYdir(-1) == (-2,3)
+    @test getXYdir(1) == (2,3)
+end
+
 @testset "PLIC.jl" begin
     TList = [Float32,Float64]
     for T∈TList
@@ -33,6 +54,20 @@ using Test
 end
 
 @testset "VOFutil.jl" begin
+    import InterfaceAdvection: get3CellHeight,getρ,getμCell,getμEdge
+    Ng = (3,3)
+    Ic = CartesianIndex(2,2)
+    Iur= CartesianIndex(Ng)
+    f = zeros(Ng); f[Ic] = 0.32; f[Ic+δ(2,Ic)] = 0.64
+
+    @test containInterface(f[Ic])
+    @test get3CellHeight(f,Ic,2) ≈ 0.96
+    @test getρ(Ic,f,0.7) ≈ 0.796
+    @test getρ(2,Ic,f,0.7) ≈ 0.748
+    @test getμCell(1,1,Iur,f,0.1,0.2,1) ≈ 0.1352
+    @test getμEdge(1,2,Iur,f,0.1,0.2,0.2) == getμEdge(2,1,Iur,f,0.1,0.2,0.2) ≈ 0.02
+    # TODO: BCVOF!
+
     N = (2,2)
     f = zeros(N.+2); α = similar(f); n̂ = zeros((N.+2 ...,2))
     interSDF=(x) -> (-x[1]-3x[2]+4.5)/√10
@@ -75,22 +110,29 @@ end
     @test ρuf[Ic+δ(d,Ic),d] ≈ 0.256
 end
 
-@testset "VOFutil.jl" begin
-    import InterfaceAdvection: get3CellHeight,getρ,getμCell,getμEdge
-    Ng = (3,3)
-    Ic = CartesianIndex(2,2)
-    Iur= CartesianIndex(Ng)
-    f = zeros(Ng); f[Ic] = 0.32; f[Ic+δ(2,Ic)] = 0.64
+@testset "surfaceTension.jl" begin
+    f = [0.3 0.2 0.1 0.1 0.2 0.3 0.0 0.0;
+        1.0 1.0 0.6 0.5 0.3 0.2 0.0 0.0;
+        0.0 0.0 0.0 0.1 0.0 0.0 0.0 0.0]
+    @test getPopinetHeight(CartesianIndex(1,5),f,2) == -0.3
+    @test getPopinetHeight(CartesianIndex(2,5),f,2) == -0.9
+    @test getPopinetHeight(CartesianIndex(3,5),f,2) == -1.4
+    @test getCurvature(CartesianIndex(2,5),f,2) ≈ 0.0672718547928328
+    # NOTE: 3D?
+end
 
-    @test containInterface(f[Ic])
-    @test get3CellHeight(f,Ic,2) ≈ 0.96
-    @test getρ(Ic,f,0.7) ≈ 0.796
-    @test getρ(2,Ic,f,0.7) ≈ 0.748
-    @test getμCell(1,1,Iur,f,0.1,0.2,1) ≈ 0.1352
-    @test getμEdge(1,2,Iur,f,0.1,0.2,0.2) == getμEdge(2,1,Iur,f,0.1,0.2,0.2) ≈ 0.02
-    # TODO: BCVOF!
+@testset "flow.jl" begin
+    # TODO
+end
+
+@testset "cVOF.jl" begin
+    # TODO
 end
 
 @testset "InterfaceAdvection.jl" begin
     # Write your tests here.
+end
+
+@testset "metrics.jl" begin
+    # TODO
 end

@@ -1,6 +1,6 @@
 
 """
-    reconstructInterface!(f,α,n̂)
+    reconstructInterface!(f,α,n̂;perdir=())
     reconstructInterface!(f,α,n̂,I)
 
 Reconstruct interface from volume fraction field (`f`), involving normal calculation (`n̂`) and then the intercept (`α`).
