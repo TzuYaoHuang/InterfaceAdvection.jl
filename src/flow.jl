@@ -12,31 +12,52 @@ import LinearAlgebra: ⋅
     return c+max(α*β,0)*ifelse(α==β && α==0, 0, (α+β)/(α^2+β^2))/2
 end
 
-@inline ϕu(a,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕuP(a,Ip,I,f,u,λ=koren) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕuL(a,I,f,u,λ=koren) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕuR(a,I,f,u,λ=koren) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
+limiter(u,c,d) = cen(u,c,d)
+
+@inline ϕu(a,I,f,u,λ=limiter) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕuP(a,Ip,I,f,u,λ=limiter) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕuL(a,I,f,u,λ=limiter) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
+@inline ϕuR(a,I,f,u,λ=limiter) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
 
-@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
+@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end],temp="explicit",method="forward") where {D,T}
+    # "implicit", "explicit"
+    # "forward", "backward", "mid", "density", "sq"
     a.u⁰ .= a.u; c.f⁰ .= c.f
     # TODO: check if BC doable for ρu
 
+    error = 1
+    tol = 3e-4
+    itmx = ifelse(temp=="implicit", 200,1)
+    itmx = ifelse(method=="forward", 0, itmx)
+    iter = 0
+    c.uOld .= a.u
+    dtCoeff = ifelse(method=="backward",T(1),T(1/2))
+
     # predictor u(n) → u(n+1/2∘) with u(n)
     @log "p"
-    dtCoeff = T(1/2)
-    dtList = @view(a.Δt[1:end-1])
-    U = BCTuple(a.U,dtList,D)
-    u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
-    advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
-    # TODO: include measure
-    a.μ₀ .= 1
-    @. c.f⁰ = (c.f⁰+c.f)/2
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
-    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
-    updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
-    update!(b)
-    myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+    while (error>tol) && (iter<itmx)
+        c.f⁰ .= c.f
+        dtList = @view(a.Δt[1:end-1])
+        U = BCTuple(a.U,dtList,D)
+        u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
+        advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
+        # TODO: include measure
+        a.μ₀ .= 1
+        MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
+        updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.U)
+        getρfm!(c.ρf,c.f,c.f⁰,c.λρ;perdir=a.perdir,method)
+        updateLρ!(a.μ₀,c.ρf;perdir=a.perdir);
+        getMidu!(a.u,a.u⁰,a.u,a.f,a.f⁰;perdir=a.perdir,method); BC!(a.u,U,a.exitBC,a.perdir)
+        update!(b)
+        myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+
+        iter += 1
+        @. c.uOld = abs2(c.uOld-a.u)
+        error = sqrt(sum(c.uOld)/length(c.uOld))
+        c.uOld .= a.u
+    end
+    @printf("    error=%10.6e, iterations=%3d\n",error,iter); flush(stdout)
 
     # c.f .= c.f⁰
     # a.u .= a.u⁰
@@ -111,6 +132,51 @@ function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
         @loop μ₀[I,d] /= getρ(d,I,f,λρ) over I∈inside(f)
     end
     BC!(μ₀,zeros(SVector{D,T}),false,perdir)
+end
+
+function updateLρ!(μ₀::AbstractArray{T,D},ρ;perdir=()) where {T,D}
+    @loop μ₀[Ii] /= ρ[Ii] over Ii ∈ CartesianIndices(ρ)
+    BC!(μ₀,zeros(SVector{D-1,T}),false,perdir)
+end
+
+function getρfm!(ρf, fold::AbstractArray{T,D}, fnew, λρ; perdir=(),method="forward") where {T,D}
+    for d∈1:D
+        @loop getρfm!(ρf, fold, fnew, λρ, I,d,method) over I∈inside(fold)
+    end
+end
+function getρfm!(ρf, fold::AbstractArray{T,D}, fnew, λρ, I,d,method) where {T,D}
+    ρold = getρ(d,I,fold,λρ)
+    ρnew = getρ(d,I,fnew,λρ)
+
+    if method=="backward"
+        ρf[I,d] = ρnew
+    elseif method=="mid"
+        ρf[I,d] = ρnew
+    elseif method=="density"
+        ρf[I,d] = (ρold+ρnew)/2
+    elseif method=="sq"
+        ρf[I,d] = ((√ρold+√ρnew)/2)^2
+    end
+end
+
+function getMidu!(uTarget,uOld,uNew,fOld::AbstractArray{T,D},fNew;perdir=(),method="forward") where {T,D}
+    for d∈1:D
+        @loop getMidu!(uTarget,uOld,uNew,fOld,fNew,I,d,method) over I∈inside(fold)
+    end
+end
+function getMidu!(uTarget,uOld,uNew,fOld,fNew,I,d,method)
+    ρold = getρ(d,I,fold,λρ)
+    ρnew = getρ(d,I,fnew,λρ)
+
+    if method=="backward"
+        uTarget[I,d] = uOld[I,d]
+    elseif method=="mid"
+        uTarget[I,d] = (uOld[I,d]+uNew[I,d])/2
+    elseif method=="density"
+        uTarget[I,d] = (ρold*uOld[I,d]+ρnew*uNew[I,d])/(ρold+ρnew)
+    elseif method=="sq"
+        uTarget[I,d] = (sqrt(ρold)*uOld[I,d]+sqrt(ρnew)*uNew[I,d])/(sqrt(ρold)+sqrt(ρnew))
+    end
 end
 
 # NOTE: Do not use @fastmath for CFL. It has problem dealing with maximum function in GPU.
