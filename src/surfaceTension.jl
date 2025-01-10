@@ -32,20 +32,20 @@ function getCurvature(I::CartesianIndex{3},f::AbstractArray{T,3},i;filter=T(0.2)
         getPopinetHeight(I+xUnit*δd(ix,I)+yUnit*δd(iy,I),f,i)
         for xUnit∈-1:1,yUnit∈-1:1
     ]
-    Hx = (H[3,2] - H[1,2])/2
-    Hy = (H[2,3] - H[2,1])/2
-    Hxx= (
+    Hₓ = (H[3,2] - H[1,2])/2
+    Hᵧ = (H[2,3] - H[2,1])/2
+    Hₓₓ= (
             (H[3,2] + H[1,2] - 2*H[2,2]) + 
             (H[3,1] + H[1,1] - 2*H[2,1])*filter +
             (H[3,3] + H[1,3] - 2*H[2,3])*filter
         )/(1+2filter)
-    Hyy= (
+    Hᵧᵧ= (
             (H[2,3] + H[2,1] - 2*H[2,2]) + 
             (H[1,3] + H[1,1] - 2*H[1,2])*filter +
             (H[3,3] + H[3,1] - 2*H[3,2])*filter
         )/(1+2filter)
-    Hxy= (H[3,3] + H[1,1] - H[3,1] - H[1,3])/4
-    return (Hxx*(1+Hy^2) + Hyy*(1+Hx^2) - 2Hxy*Hx*Hy)/(1+Hx^2+Hy^2)^T(1.5)
+    Hₓᵧ= (H[3,3] + H[1,1] - H[3,1] - H[1,3])/4
+    return (Hₓₓ*(1+Hᵧ^2) + Hᵧᵧ*(1+Hₓ^2) - 2Hₓᵧ*Hₓ*Hᵧ)/root1p5(1+Hₓ^2+Hᵧ^2)
 end
 function getCurvature(I::CartesianIndex{2},f::AbstractArray{T,2},i) where T
     ix = getXdir(i)
@@ -55,7 +55,7 @@ function getCurvature(I::CartesianIndex{2},f::AbstractArray{T,2},i) where T
     ]
     Hₓ = (H[3]-H[1])/2
     Hₓₓ= (H[3]+H[1]-2H[2])
-    return Hₓₓ/(1+Hₓ^2)^T(1.5)
+    return Hₓₓ/root1p5(1+Hₓ^2)
 end
 
 """
@@ -99,3 +99,5 @@ function getPopinetHeightAdaptive(I,f::AbstractArray{T,D},i,monotonic=true) wher
     consistent = (fnow==1) && consistent
     return H,consistent
 end
+
+@inline @fastmath root1p5(a) = sqrt(a^3)
