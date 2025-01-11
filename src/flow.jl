@@ -20,9 +20,11 @@ limiter(u,c,d) = cen(u,c,d)
 @inline ϕuR(a,I,f,u,λ=limiter) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
 
-@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end],temp="explicit",method="forward") where {D,T}
-    # "implicit", "explicit"
-    # "forward", "backward", "mid", "density", "sq"
+@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end],temp="implicit",method="backward") where {D,T}
+
+    if temp ∉ ["implicit", "explicit"] error("Explicit or implicit??????") end
+    if method ∉ ["forward", "backward", "mid", "density", "sq"] error("Which RK2????") end
+
     a.u⁰ .= a.u; c.f⁰ .= c.f
     # TODO: check if BC doable for ρu
 
@@ -33,6 +35,7 @@ limiter(u,c,d) = cen(u,c,d)
     iter = 0
     c.uOld .= a.u
     dtCoeff = ifelse(method=="backward",T(1),T(1/2))
+    α = T(0.3)
 
     # predictor u(n) → u(n+1/2∘) with u(n)
     @log "p"
@@ -41,23 +44,47 @@ limiter(u,c,d) = cen(u,c,d)
         dtList = @view(a.Δt[1:end-1])
         U = BCTuple(a.U,dtList,D)
         u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
-        advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
+        advect!(a,c,c.f⁰,a.u,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
         # TODO: include measure
         a.μ₀ .= 1
         MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
         updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.U)
         getρfm!(c.ρf,c.f,c.f⁰,c.λρ;perdir=a.perdir,method)
         updateLρ!(a.μ₀,c.ρf;perdir=a.perdir);
-        getMidu!(a.u,a.u⁰,a.u,a.f,a.f⁰;perdir=a.perdir,method); BC!(a.u,U,a.exitBC,a.perdir)
+        getMidu!(a.u,a.u⁰,a.u,c.f,c.f⁰,c.λρ;perdir=a.perdir,method); BC!(a.u,U,a.exitBC,a.perdir)
         update!(b)
         myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
 
         iter += 1
-        @. c.uOld = abs2(c.uOld-a.u)
+
+        # relaxation factor
+        if iter > 1 @. a.u = α*a.u + (1-α)*c.uOld end
+
+        # check time step in iteration for cVOF calculation
+        δtCandidate = MPCFL(a,c)
+        if δtCandidate < 0.5δt
+            a.u .= a.u⁰
+            c.f⁰ .= c.f
+            a.Δt[end] = δtCandidate
+            return nothing
+        end
+
+        # Calculate error
+        @. c.uOld = abs2(c.uOld-a.u)/α^2
         error = sqrt(sum(c.uOld)/length(c.uOld))
-        c.uOld .= a.u
+
+        # Store old value
+        @. c.uOld = a.u
     end
-    @printf("    error=%10.6e, iterations=%3d\n",error,iter); flush(stdout)
+
+    # # should we rerun the error?
+    # if iter == itmx
+    #     a.u .= a.u⁰
+    #     c.f⁰ .= c.f
+    #     a.Δt[end] = 0.25a.Δt[end]
+    #     return nothing
+    # end
+    (temp=="implicit") && @printf("    error=%10.6e, iterations=%3d\n",error,iter); flush(stdout)
 
     # c.f .= c.f⁰
     # a.u .= a.u⁰
@@ -139,14 +166,14 @@ function updateLρ!(μ₀::AbstractArray{T,D},ρ;perdir=()) where {T,D}
     BC!(μ₀,zeros(SVector{D-1,T}),false,perdir)
 end
 
-function getρfm!(ρf, fold::AbstractArray{T,D}, fnew, λρ; perdir=(),method="forward") where {T,D}
+function getρfm!(ρf, fOld::AbstractArray{T,D}, fNew, λρ; perdir=(),method="forward") where {T,D}
     for d∈1:D
-        @loop getρfm!(ρf, fold, fnew, λρ, I,d,method) over I∈inside(fold)
+        @loop getρfm!(ρf, fOld, fNew, λρ, I,d,method) over I∈inside(fOld)
     end
 end
-function getρfm!(ρf, fold::AbstractArray{T,D}, fnew, λρ, I,d,method) where {T,D}
-    ρold = getρ(d,I,fold,λρ)
-    ρnew = getρ(d,I,fnew,λρ)
+function getρfm!(ρf, fOld::AbstractArray{T,D}, fNew, λρ, I,d,method) where {T,D}
+    ρold = getρ(d,I,fOld,λρ)
+    ρnew = getρ(d,I,fNew,λρ)
 
     if method=="backward"
         ρf[I,d] = ρnew
@@ -159,17 +186,17 @@ function getρfm!(ρf, fold::AbstractArray{T,D}, fnew, λρ, I,d,method) where {
     end
 end
 
-function getMidu!(uTarget,uOld,uNew,fOld::AbstractArray{T,D},fNew;perdir=(),method="forward") where {T,D}
+function getMidu!(uTarget,uOld,uNew,fOld::AbstractArray{T,D},fNew,λρ;perdir=(),method="forward") where {T,D}
     for d∈1:D
-        @loop getMidu!(uTarget,uOld,uNew,fOld,fNew,I,d,method) over I∈inside(fold)
+        @loop getMidu!(uTarget,uOld,uNew,fOld,fNew,λρ,I,d,method) over I∈inside(fOld)
     end
 end
-function getMidu!(uTarget,uOld,uNew,fOld,fNew,I,d,method)
-    ρold = getρ(d,I,fold,λρ)
-    ρnew = getρ(d,I,fnew,λρ)
+function getMidu!(uTarget,uOld,uNew,fOld,fNew,λρ,I,d,method)
+    ρold = getρ(d,I,fOld,λρ)
+    ρnew = getρ(d,I,fNew,λρ)
 
     if method=="backward"
-        uTarget[I,d] = uOld[I,d]
+        uTarget[I,d] = uNew[I,d]
     elseif method=="mid"
         uTarget[I,d] = (uOld[I,d]+uNew[I,d])/2
     elseif method=="density"
