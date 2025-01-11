@@ -20,21 +20,33 @@ limiter(u,c,d) = cen(u,c,d)
 @inline ϕuR(a,I,f,u,λ=limiter) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
 
-@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end],temp="implicit",method="backward") where {D,T}
+@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end],tempABC="implicit",methodABC="sq") where {D,T}
 
-    if temp ∉ ["implicit", "explicit"] error("Explicit or implicit??????") end
-    if method ∉ ["forward", "backward", "mid", "density", "sq"] error("Which RK2????") end
+    temp = begin 
+        if tempABC=="explicit" 0 
+        elseif  tempABC=="implicit" 1 
+        else error("Explicit or Implicit??????") end
+    end
+
+    method = begin 
+        if methodABC=="forward" 0 
+        elseif methodABC=="backward" 1 
+        elseif methodABC=="mid" 2
+        elseif methodABC=="density" 3 
+        elseif methodABC=="sq" 4 
+        else error("What is your RK2...") end
+    end
 
     a.u⁰ .= a.u; c.f⁰ .= c.f
     # TODO: check if BC doable for ρu
 
     error = 1
     tol = 3e-4
-    itmx = ifelse(temp=="implicit", 200,1)
-    itmx = ifelse(method=="forward", 0, itmx)
+    itmx = ifelse(temp==0, 1, 200)
+    itmx = ifelse(method==0, 0, itmx)
     iter = 0
     c.uOld .= a.u
-    dtCoeff = ifelse(method=="backward",T(1),T(1/2))
+    dtCoeff = ifelse(method==1, T(1), T(1/2))
     α = T(0.3)
 
     # predictor u(n) → u(n+1/2∘) with u(n)
@@ -84,10 +96,7 @@ limiter(u,c,d) = cen(u,c,d)
     #     a.Δt[end] = 0.25a.Δt[end]
     #     return nothing
     # end
-    (temp=="implicit") && @printf("    error=%10.6e, iterations=%3d\n",error,iter); flush(stdout)
-
-    # c.f .= c.f⁰
-    # a.u .= a.u⁰
+    (temp==1) && @printf("    error=%10.6e, iterations=%3d\n",error,iter); flush(stdout)
 
     # corrector u(n) → u(n+1) with u(n+1/2∘)
     @log "c"
@@ -166,7 +175,7 @@ function updateLρ!(μ₀::AbstractArray{T,D},ρ;perdir=()) where {T,D}
     BC!(μ₀,zeros(SVector{D-1,T}),false,perdir)
 end
 
-function getρfm!(ρf, fOld::AbstractArray{T,D}, fNew, λρ; perdir=(),method="forward") where {T,D}
+function getρfm!(ρf, fOld::AbstractArray{T,D}, fNew, λρ; perdir=(),method=0) where {T,D}
     for d∈1:D
         @loop getρfm!(ρf, fOld, fNew, λρ, I,d,method) over I∈inside(fOld)
     end
@@ -175,18 +184,18 @@ function getρfm!(ρf, fOld::AbstractArray{T,D}, fNew, λρ, I,d,method) where {
     ρold = getρ(d,I,fOld,λρ)
     ρnew = getρ(d,I,fNew,λρ)
 
-    if method=="backward"
+    if method==1
         ρf[I,d] = ρnew
-    elseif method=="mid"
+    elseif method==2
         ρf[I,d] = ρnew
-    elseif method=="density"
+    elseif method==3
         ρf[I,d] = (ρold+ρnew)/2
-    elseif method=="sq"
+    elseif method==4
         ρf[I,d] = ((√ρold+√ρnew)/2)^2
     end
 end
 
-function getMidu!(uTarget,uOld,uNew,fOld::AbstractArray{T,D},fNew,λρ;perdir=(),method="forward") where {T,D}
+function getMidu!(uTarget,uOld,uNew,fOld::AbstractArray{T,D},fNew,λρ;perdir=(),method=0) where {T,D}
     for d∈1:D
         @loop getMidu!(uTarget,uOld,uNew,fOld,fNew,λρ,I,d,method) over I∈inside(fOld)
     end
@@ -195,13 +204,13 @@ function getMidu!(uTarget,uOld,uNew,fOld,fNew,λρ,I,d,method)
     ρold = getρ(d,I,fOld,λρ)
     ρnew = getρ(d,I,fNew,λρ)
 
-    if method=="backward"
+    if method==1
         uTarget[I,d] = uNew[I,d]
-    elseif method=="mid"
+    elseif method==2
         uTarget[I,d] = (uOld[I,d]+uNew[I,d])/2
-    elseif method=="density"
+    elseif method==3
         uTarget[I,d] = (ρold*uOld[I,d]+ρnew*uNew[I,d])/(ρold+ρnew)
-    elseif method=="sq"
+    elseif method==4
         uTarget[I,d] = (sqrt(ρold)*uOld[I,d]+sqrt(ρnew)*uNew[I,d])/(sqrt(ρold)+sqrt(ρnew))
     end
 end
