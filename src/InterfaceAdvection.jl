@@ -93,6 +93,8 @@ end
 export TwoPhaseSimulation
 
 # overload for simStep
+# solutoin from https://discourse.julialang.org/t/functions-from-different-modules-with-the-same-name/61505/2
+import WaterLily: sim_step!
 # TODO: support BDIM body
 function sim_step!(sim::TwoPhaseSimulation,t_end;remeasure=false,max_steps=typemax(Int),verbose=false)
     steps₀ = length(sim.flow.Δt)
