@@ -20,7 +20,7 @@ limiter(u,c,d) = cen(u,c,d)
 @inline ϕuR(a,I,f,u,λ=limiter) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
 
-@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end],tempABC="implicit",methodABC="sq") where {D,T}
+@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end],tempABC="explicit",methodABC="forward") where {D,T}
 
     temp = begin 
         if tempABC=="explicit" 0 
@@ -47,7 +47,7 @@ limiter(u,c,d) = cen(u,c,d)
     iter = 0
     c.uOld .= a.u
     dtCoeff = ifelse(method==1, T(1), T(1/2))
-    α = T(0.3)
+    α = T(0.4)
 
     # predictor u(n) → u(n+1/2∘) with u(n)
     @log "p"
@@ -89,13 +89,13 @@ limiter(u,c,d) = cen(u,c,d)
         @. c.uOld = a.u
     end
 
-    # # should we rerun the error?
-    # if iter == itmx
-    #     a.u .= a.u⁰
-    #     c.f⁰ .= c.f
-    #     a.Δt[end] = 0.25a.Δt[end]
-    #     return nothing
-    # end
+    # should we rerun the error?
+    if (iter == itmx) && (method > 0)
+        a.u .= a.u⁰
+        c.f⁰ .= c.f
+        a.Δt[end] = 0.25a.Δt[end]
+        return nothing
+    end
     (temp==1) && @printf("    error=%10.6e, iterations=%3d\n",error,iter); flush(stdout)
 
     # corrector u(n) → u(n+1) with u(n+1/2∘)
@@ -114,7 +114,7 @@ limiter(u,c,d) = cen(u,c,d)
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
 
-    push!(a.Δt,min(MPCFL(a,c),1.2a.Δt[end]))
+    push!(a.Δt, min(MPCFL(a,c)*ifelse(method==0, T(0.5), T(1)), 1.2a.Δt[end]))
 end
 
 # Forcing with the unit of ρu instead of u
