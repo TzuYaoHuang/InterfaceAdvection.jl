@@ -20,7 +20,7 @@ limiter(u,c,d) = cen(u,c,d)
 @inline ϕuR(a,I,f,u,λ=limiter) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
 
 
-@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end],tempABC="explicit",methodABC="forward") where {D,T}
+@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end],tempABC="implicit",methodABC="sq") where {D,T}
 
     temp = begin 
         if tempABC=="explicit" 0 
@@ -42,12 +42,12 @@ limiter(u,c,d) = cen(u,c,d)
 
     error = 1
     tol = 3e-4
-    itmx = ifelse(temp==0, 1, 200)
+    itmx = ifelse(temp==0, 1, 50)
     itmx = ifelse(method==0, 0, itmx)
     iter = 0
     c.uOld .= a.u
     dtCoeff = ifelse(method==1, T(1), T(1/2))
-    α = T(0.4)
+    α = T(0.5)
 
     # predictor u(n) → u(n+1/2∘) with u(n)
     @log "p"
@@ -77,7 +77,7 @@ limiter(u,c,d) = cen(u,c,d)
         if δtCandidate < 0.5δt
             a.u .= a.u⁰
             c.f⁰ .= c.f
-            a.Δt[end] = δtCandidate
+            a.Δt[end] = δtCandidate/0.9
             return nothing
         end
 
@@ -93,7 +93,7 @@ limiter(u,c,d) = cen(u,c,d)
     if (iter == itmx) && (method > 0)
         a.u .= a.u⁰
         c.f⁰ .= c.f
-        a.Δt[end] = 0.25a.Δt[end]
+        a.Δt[end] = 0.5a.Δt[end]
         return nothing
     end
     (temp==1) && @printf("    error=%10.6e, iterations=%3d\n",error,iter); flush(stdout)
