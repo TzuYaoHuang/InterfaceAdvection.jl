@@ -74,7 +74,7 @@ limiter(u,c,d) = cen(u,c,d)
 
         # check time step in iteration for cVOF calculation
         δtCandidate = MPCFL(a,c)
-        if δtCandidate < 0.5δt
+        if (δtCandidate < 0.5δt) && (temp==1)
             a.u .= a.u⁰
             c.f⁰ .= c.f
             a.Δt[end] = δtCandidate/0.9
@@ -90,7 +90,7 @@ limiter(u,c,d) = cen(u,c,d)
     end
 
     # should we rerun the error?
-    if (iter == itmx) && (method > 0)
+    if (iter == itmx) && (method > 0) && (temp==1)
         a.u .= a.u⁰
         c.f⁰ .= c.f
         a.Δt[end] = 0.5a.Δt[end]
