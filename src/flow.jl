@@ -6,6 +6,7 @@ import LinearAlgebra: ⋅
 @fastmath upwind(u,c,d) = c
 @fastmath cen(u,c,d) = (c+d)/2
 @fastmath minmod(u,c,d) = median((3c-u)/2,c,(c+d)/2)
+@fastmath trueKoren(u,c,d) = median((7c+d-2u)/6,c,median(2c-u,c,d))
 @fastmath koren(u,c,d) = median((5c+2d-u)/6,c,median(2c-1u,c,d))
 @fastmath function vanAlbada1(u,c,d)
     α,β = c-u,d-c
@@ -182,7 +183,7 @@ end
 @inline function inproject!(a::Flow{n,T},b::Poisson,dt) where {n,T}
     b.z .= 0; b.ϵ .= 0; b.r .= 0
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
-    psolver!(b;tol=50eps(T),itmx=1e3)
+    psolver!(b;tol=500eps(T),itmx=1e3)
 end
 
 @inline function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
