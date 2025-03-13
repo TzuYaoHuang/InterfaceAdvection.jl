@@ -40,11 +40,11 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; 
     OpCoeff = D==2 ? SVector{4,T}(1-s2, s2, s2, 1-s2) : SVector{6,T}(1/2, 1-s2, s2, s2, 1-s2, 1/2)
 
     # Second-order Strang
-    # OpOrder = D==2 ? SVector{3,Int8}(1, 2, 1) : SVector{5,T}(1, 2, 3, 2, 1)
+    # OpOrder = D==2 ? SVector{3,Int8}(1, 2, 1) : SVector{5,Int8}(1, 2, 3, 2, 1)
     # OpCoeff = D==2 ? SVector{3,T}(1/2, 1, 1/2) : SVector{5,T}(1/2, 1/2, 1, 1/2, 1/2)
 
     # First-order Lie-Trotter
-    # OpOrder = D==2 ? SVector{2,Int8}(1, 2) : SVector{3,T}(1, 2, 3)
+    # OpOrder = D==2 ? SVector{2,Int8}(1, 2) : SVector{3,Int8}(1, 2, 3)
     # OpCoeff = D==2 ? SVector{2,T}(1, 1) : SVector{3,T}(1, 1, 1)
 
     for iOp∈eachindex(OpOrder)
