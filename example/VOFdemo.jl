@@ -7,6 +7,9 @@ using InteractiveUtils
 # ╔═╡ df7ea790-040d-11f0-2bc0-63538b86512f
 # ╠═╡ show_logs = false
 begin
+	using Pkg
+	Pkg.activate(joinpath(@__DIR__))
+
 	using Plots
 	using Plots.PlotMeasures
 	using EllipsisNotation
@@ -15,9 +18,7 @@ begin
 
 	using WaterLily
 	import WaterLily: @loop, inside, apply!, ∂, div
-	
-	using Pkg
-	Pkg.activate(joinpath(@__DIR__))
+
 	Pkg.add(url="https://github.com/TzuYaoHuang/InterfaceAdvection.jl", rev="demo/VOF")
 	using InterfaceAdvection
 	import InterfaceAdvection: ϕ, BCf!, cleanWisp!, inside_uWB
@@ -33,7 +34,7 @@ end
 
 # ╔═╡ 2488b501-9399-4b5c-9e80-1c5707a9808c
 begin
-	print("Check if the project is correct. Shoould be like \n/PATH/TO/YOUR/DOWNLOAD/InterfaceAdvection.jl/example/Project.toml:\n\n")
+	print("Check if the activated project is correct. Shoould be like \n/PATH/TO/YOUR/DOWNLOAD/InterfaceAdvection.jl/example/Project.toml\nYours:\n")
 	println(Base.ACTIVE_PROJECT[])
 end
 
@@ -161,7 +162,6 @@ function advectaVOF!(f::AbstractArray{T,D}, fᶠAll, u, Δt, c̄; dirSplit=true,
 	end
 
 	!dirSplit && begin 
-		reconstructInterface!(f,α,n̂;perdir)
 		for d ∈ 1:D
 			fᶠ = @view fᶠAll[..,d]
 			getaVOFFlux!(fᶠ,f,u,Δt,d,upwind)
@@ -249,7 +249,7 @@ function plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, up
 end
 
 # ╔═╡ 6d32e55a-fb3c-4679-92b7-1b18b4c5ab53
-tArray,anim,fList,dList = plotEvolvingVOF(;N=48, geometric=true, dirSplit=true, dilation=true, upwind=true, CFL=1.0, PREC=Float64, arr=Array);
+tArray,anim,fList,dList = plotEvolvingVOF(;N=64, geometric=true, dirSplit=true, dilation=false, upwind=true, CFL=0.25, PREC=Float64, arr=Array);
 
 # ╔═╡ d9104001-d23a-4bd3-8f30-e8ee98d4c127
 mp4(anim,fps=length(tArray)÷15)
@@ -263,8 +263,8 @@ plotVolLoss(tArray,fList)
 # ╟─2488b501-9399-4b5c-9e80-1c5707a9808c
 # ╟─02d24b74-93ae-4ac1-9bf6-1609e93a4aa8
 # ╠═6d32e55a-fb3c-4679-92b7-1b18b4c5ab53
-# ╠═d9104001-d23a-4bd3-8f30-e8ee98d4c127
-# ╠═fcaaab61-37d8-40d4-af1c-ec295382ddd1
+# ╟─d9104001-d23a-4bd3-8f30-e8ee98d4c127
+# ╟─fcaaab61-37d8-40d4-af1c-ec295382ddd1
 # ╟─363f08b8-2f23-428f-85f3-67b55c934ac2
 # ╟─f9d2664a-bec3-433e-a07f-f5db1cca8e7a
 # ╟─024fbdef-babe-4ea1-b3ce-2b731b8a3122
