@@ -11,6 +11,7 @@ begin
 	using Plots.PlotMeasures
 	using EllipsisNotation
 	using LaTeXStrings
+	using CUDA
 
 	using WaterLily
 	import WaterLily: @loop, inside, apply!, ∂, div
@@ -38,44 +39,6 @@ end
 
 # ╔═╡ 02d24b74-93ae-4ac1-9bf6-1609e93a4aa8
 print("You are running with $(Threads.nthreads()) threads")
-
-# ╔═╡ 0cec37e8-1868-4916-95e9-809c878184fc
-# define the velocity
-begin
-	UV(i,x,t,T) = i==1 ? U(x[1],x[2],t,T) : V(x[1],x[2],t,T)
-	U(x,y,t,T) = sin(π*x)^2*sin(2π*y)*cos(π*t/T)
-	V(x,y,t,T) = -sin(2π*x)*sin(π*y)^2*cos(π*t/T)
-end
-
-# ╔═╡ 51d9c402-0956-42fe-a201-22a87e888a8e
-function generateCoord(scalarArray::AbstractArray{T,D};normalize=1,shift=zeros(T,D)) where {T,D}
-    Ng = size(scalarArray)
-    N = Ng.-2
-    cenTuple = ntuple((i) -> ((1:Ng[i]) .- 1.5 .- N[i]/2 .- shift[i])/normalize,D)
-    edgTuple = ntuple((i) -> ((1:Ng[i]) .- 2.0 .- N[i]/2 .- shift[i])/normalize,D)
-    limTuple = ntuple((i) -> ([0,N[i]] .- N[i]/2 .- shift[i])/normalize,D)
-
-    return cenTuple,edgTuple,limTuple
-end
-
-# ╔═╡ ad2416f8-76af-42c3-adf8-fd1c21e34d3f
-function plotContour!(plt,xc,yc,f;clim=(0,1),levels=[0.5],color=:Black,lw=1.5)
-    clamp!(f,clim...)
-    Plots.contour!(plt,xc,yc,f',levels=levels,color=color,lw=lw,clim=clim)
-    return plt
-end
-
-# ╔═╡ eaddbc65-8688-433a-b13c-78c8bf61db07
-function organizePlot!(plt,xlim,ylim)
-    Plots.plot!(plt,xlimit=xlim,ylimit=ylim,aspect_ratio=:equal)
-end
-
-# ╔═╡ 371449c8-bd83-4c11-b48e-1f3045b7ab3c
-function plotVolLoss(tArray,fList)
-	Plots.plot(tArray,(fList.-fList[1])/fList[1],color=:blue)
-	Plots.plot!(ylabel="Relative Volume Change",xlabel=L"t",xlimit=(0,4))
-	Plots.plot!(size=(550,400))
-end
 
 # ╔═╡ f9d2664a-bec3-433e-a07f-f5db1cca8e7a
 """
@@ -117,6 +80,44 @@ function advectgVOF!(f::AbstractArray{T,D}, fᶠAll, α, n̂, u, Δt, c̄, ρuf,
 		cleanWisp!(f,tol)
 		BCf!(f;perdir)
 	end
+end
+
+# ╔═╡ 0cec37e8-1868-4916-95e9-809c878184fc
+# define the velocity
+begin
+	UV(i,x,t,T) = i==1 ? U(x[1],x[2],t,T) : V(x[1],x[2],t,T)
+	U(x,y,t,T) = sin(π*x)^2*sin(2π*y)*cos(π*t/T)
+	V(x,y,t,T) = -sin(2π*x)*sin(π*y)^2*cos(π*t/T)
+end
+
+# ╔═╡ 51d9c402-0956-42fe-a201-22a87e888a8e
+function generateCoord(scalarArray::AbstractArray{T,D};normalize=1,shift=zeros(T,D)) where {T,D}
+    Ng = size(scalarArray)
+    N = Ng.-2
+    cenTuple = ntuple((i) -> ((1:Ng[i]) .- 1.5 .- N[i]/2 .- shift[i])/normalize,D)
+    edgTuple = ntuple((i) -> ((1:Ng[i]) .- 2.0 .- N[i]/2 .- shift[i])/normalize,D)
+    limTuple = ntuple((i) -> ([0,N[i]] .- N[i]/2 .- shift[i])/normalize,D)
+
+    return cenTuple,edgTuple,limTuple
+end
+
+# ╔═╡ ad2416f8-76af-42c3-adf8-fd1c21e34d3f
+function plotContour!(plt,xc,yc,f;clim=(0,1),levels=[0.5],color=:Black,lw=1.5)
+    clamp!(f,clim...)
+    Plots.contour!(plt,xc,yc,f',levels=levels,color=color,lw=lw,clim=clim)
+    return plt
+end
+
+# ╔═╡ eaddbc65-8688-433a-b13c-78c8bf61db07
+function organizePlot!(plt,xlim,ylim)
+    Plots.plot!(plt,xlimit=xlim,ylimit=ylim,aspect_ratio=:equal)
+end
+
+# ╔═╡ 371449c8-bd83-4c11-b48e-1f3045b7ab3c
+function plotVolLoss(tArray,fList)
+	Plots.plot(tArray,(fList.-fList[1])/fList[1],color=:blue)
+	Plots.plot!(ylabel="Relative Volume Change",xlabel=L"t",xlimit=(0,4))
+	Plots.plot!(size=(550,400))
 end
 
 # ╔═╡ caee182a-097c-49c1-98ac-1b3e83c6c8a9
@@ -172,7 +173,19 @@ function advectaVOF!(f::AbstractArray{T,D}, fᶠAll, u, Δt, c̄; dirSplit=true,
 end
 
 # ╔═╡ 363f08b8-2f23-428f-85f3-67b55c934ac2
-function plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, upwind=true, CFL=0.5, PREC=Float32)
+"""
+    plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, upwind=true, CFL=0.5, PREC=Float32, arr=Array)
+
+This is the function for general VOF demonstration.
+`geometric` is to choose geometric or algebraic.
+`dirSplit` indicates diretional split or not.
+`dilation` indicates to include dilation term or not.
+`upwind` controls using donor-acceptor concept.
+`CFL` is just the time step size as we set the velocity scale and grid size to be unit.
+`PREC` is the precision. (Float32, Float64 ...)
+`arr` is the array type. (Array, CUDA.CuArray, ...)
+"""
+function plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, upwind=true, CFL=0.5, PREC=Float32, arr=Array)
 
 	# define time series
 	δt = PREC(CFL)
@@ -181,9 +194,8 @@ function plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, up
 
 	# define cVOF struct
 	c = cVOF( (N,N); 
-		arr=Array, T=PREC, 
-		InterfaceSDF=(x) -> √sum((x.-[0.50,0.75]*N).^2) - 0.15N,
-		perdir=(1,2)
+		arr, T=PREC, 
+		InterfaceSDF=(x) -> √sum((x.-[0.50,0.75]*N).^2) - 0.15N
 	)
 
 	# initial the velocity field
@@ -199,7 +211,7 @@ function plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, up
 	c.fᶠ .= 0
 	apply!((i,x)->UV(i,x/N,0,T),vel)
 	@loop c.fᶠ[I] = abs(div(I,vel)) over I∈inside(c.f)
-	print(maximum(c.fᶠ))
+	print("The maximum divergence of the velocity field is $(maximum(c.fᶠ)).")
 
 	# the main loop
 	anim = Plots.Animation()
@@ -210,7 +222,7 @@ function plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, up
 
 		# update the velocity (velocity is prescribed but unsteady)
         apply!((i,x)->UV(i,x/N,tᵢ,T),vel)
-		BC!(vel,[],false,c.perdir)
+		BC!(vel,[0,0],false,c.perdir)
 
 		# the advection part
         geometric && advectgVOF!(
@@ -224,7 +236,7 @@ function plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, up
 
 		# plotting to save for post-processing
         plt = Plots.plot()
-        plt = plotContour!(plt, cenTuple[1], cenTuple[2], c.f, 
+        plt = plotContour!(plt, cenTuple[1], cenTuple[2], c.f |> Array, 
 			clim=(0,1),color=:isoluminant_cgo_70_c39_n256, 
 			levels=[0.05,0.1,0.15,0.2,0.3,0.4,0.5,0.6,0.8])
         Plots.plot!(plt,cbar_title=L"f",xlabel=L"x",ylabel=L"y")
@@ -237,29 +249,29 @@ function plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, up
 end
 
 # ╔═╡ 6d32e55a-fb3c-4679-92b7-1b18b4c5ab53
-tArray,anim,fList,dList = plotEvolvingVOF(;N=48, geometric=true, dirSplit=true, dilation=true, upwind=true, CFL=0.25);
+tArray,anim,fList,dList = plotEvolvingVOF(;N=48, geometric=true, dirSplit=true, dilation=true, upwind=true, CFL=1.0, PREC=Float64, arr=Array);
 
 # ╔═╡ d9104001-d23a-4bd3-8f30-e8ee98d4c127
-gif(anim,fps=length(tArray)÷15)
+mp4(anim,fps=length(tArray)÷15)
 
 # ╔═╡ fcaaab61-37d8-40d4-af1c-ec295382ddd1
 plotVolLoss(tArray,fList)
 
 # ╔═╡ Cell order:
-# ╠═df7ea790-040d-11f0-2bc0-63538b86512f
-# ╠═c3d9659e-c410-42ae-b561-a1f0d6ea875d
-# ╠═2488b501-9399-4b5c-9e80-1c5707a9808c
-# ╠═02d24b74-93ae-4ac1-9bf6-1609e93a4aa8
+# ╟─df7ea790-040d-11f0-2bc0-63538b86512f
+# ╟─c3d9659e-c410-42ae-b561-a1f0d6ea875d
+# ╟─2488b501-9399-4b5c-9e80-1c5707a9808c
+# ╟─02d24b74-93ae-4ac1-9bf6-1609e93a4aa8
 # ╠═6d32e55a-fb3c-4679-92b7-1b18b4c5ab53
 # ╠═d9104001-d23a-4bd3-8f30-e8ee98d4c127
 # ╠═fcaaab61-37d8-40d4-af1c-ec295382ddd1
-# ╠═363f08b8-2f23-428f-85f3-67b55c934ac2
-# ╠═0cec37e8-1868-4916-95e9-809c878184fc
-# ╠═51d9c402-0956-42fe-a201-22a87e888a8e
-# ╠═ad2416f8-76af-42c3-adf8-fd1c21e34d3f
-# ╠═eaddbc65-8688-433a-b13c-78c8bf61db07
-# ╠═371449c8-bd83-4c11-b48e-1f3045b7ab3c
-# ╠═f9d2664a-bec3-433e-a07f-f5db1cca8e7a
-# ╠═024fbdef-babe-4ea1-b3ce-2b731b8a3122
-# ╠═caee182a-097c-49c1-98ac-1b3e83c6c8a9
-# ╠═aa826573-1d51-4d77-84cb-82bd4510b86a
+# ╟─363f08b8-2f23-428f-85f3-67b55c934ac2
+# ╟─f9d2664a-bec3-433e-a07f-f5db1cca8e7a
+# ╟─024fbdef-babe-4ea1-b3ce-2b731b8a3122
+# ╟─0cec37e8-1868-4916-95e9-809c878184fc
+# ╟─51d9c402-0956-42fe-a201-22a87e888a8e
+# ╟─ad2416f8-76af-42c3-adf8-fd1c21e34d3f
+# ╟─eaddbc65-8688-433a-b13c-78c8bf61db07
+# ╟─371449c8-bd83-4c11-b48e-1f3045b7ab3c
+# ╟─caee182a-097c-49c1-98ac-1b3e83c6c8a9
+# ╟─aa826573-1d51-4d77-84cb-82bd4510b86a
