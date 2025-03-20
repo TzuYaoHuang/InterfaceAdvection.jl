@@ -15,6 +15,7 @@ begin
 	using EllipsisNotation
 	using LaTeXStrings
 	using CUDA
+	using StaticArrays
 
 	using WaterLily
 	import WaterLily: @loop, inside, apply!, ∂, div
@@ -195,11 +196,12 @@ function plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, up
 	# define cVOF struct
 	c = cVOF( (N,N); 
 		arr, T=PREC, 
-		InterfaceSDF=(x) -> √sum((x.-[0.50,0.75]*N).^2) - 0.15N
+		InterfaceSDF=(x) -> √sum(abs2,x.-SA[0.50N,0.75N]) - 0.15N
 	)
 
 	# initial the velocity field
 	vel = zero(c.ρu)
+	vof = zeros(size(c.f))
 
 	# place to store volue loss
 	fList = []
@@ -222,7 +224,7 @@ function plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, up
 
 		# update the velocity (velocity is prescribed but unsteady)
         apply!((i,x)->UV(i,x/N,tᵢ,T),vel)
-		BC!(vel,[0,0],false,c.perdir)
+		BC!(vel,SA[0,0],false,c.perdir)
 
 		# the advection part
         geometric && advectgVOF!(
@@ -234,9 +236,11 @@ function plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, up
 			dirSplit, dilation, upwind, c.perdir
 		)
 
+		copyto!(vof, c.f) 
+
 		# plotting to save for post-processing
         plt = Plots.plot()
-        plt = plotContour!(plt, cenTuple[1], cenTuple[2], c.f |> Array, 
+        plt = plotContour!(plt, cenTuple[1], cenTuple[2], vof, 
 			clim=(0,1),color=:isoluminant_cgo_70_c39_n256, 
 			levels=[0.05,0.1,0.15,0.2,0.3,0.4,0.5,0.6,0.8])
         Plots.plot!(plt,cbar_title=L"f",xlabel=L"x",ylabel=L"y")
@@ -249,7 +253,7 @@ function plotEvolvingVOF(;N=32, geometric=true, dirSplit=true, dilation=true, up
 end
 
 # ╔═╡ 6d32e55a-fb3c-4679-92b7-1b18b4c5ab53
-tArray,anim,fList,dList = plotEvolvingVOF(;N=64, geometric=true, dirSplit=true, dilation=false, upwind=true, CFL=0.25, PREC=Float64, arr=Array);
+tArray,anim,fList,dList = plotEvolvingVOF(;N=64, geometric=false, dirSplit=false, dilation=true, upwind=false, CFL=0.25, PREC=Float32, arr=CuArray);
 
 # ╔═╡ d9104001-d23a-4bd3-8f30-e8ee98d4c127
 mp4(anim,fps=length(tArray)÷15)
