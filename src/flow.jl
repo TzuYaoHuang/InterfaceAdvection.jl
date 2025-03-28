@@ -151,7 +151,7 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
     @inside z[I] = ϵ[I] = r[I]*p.iD[I]
     insideI = inside(x)
     rho = r ⋅ z
-    @log ", $nᵖ, $(L∞(p)), $r₂\n"
+    @log @sprintf(", %4d, %10.4e, %10.4e\n", nᵖ, L∞(p), r₂)
     while (r₂>tol || (r₂>tol/4 && nᵖ==0)) && nᵖ<itmx
         # abs(rho)<10eps(eltype(z)) && break
         perBC!(ϵ,p.perdir)
@@ -166,7 +166,7 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
         rho = rho2
         r₂ = L₂(p)
         nᵖ+=1
-        @log ", $nᵖ, $(L∞(p)), $r₂\n"
+        @log @sprintf(", %4d, %10.4e, %10.4e\n", nᵖ, L∞(p), r₂)
     end
     perBC!(p.x,p.perdir)
 end
@@ -183,7 +183,7 @@ end
 @inline function inproject!(a::Flow{n,T},b::Poisson,dt) where {n,T}
     b.z .= 0; b.ϵ .= 0; b.r .= 0
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
-    psolver!(b;tol=500eps(T),itmx=1e3)
+    psolver!(b;tol=sqrt(eps(T))/30,itmx=750)
 end
 
 @inline function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
