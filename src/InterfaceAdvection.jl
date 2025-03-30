@@ -111,6 +111,10 @@ end
 
 export sim_step!
 
+import WaterLily: restart_sim!
+function restart_sim! end
+export restart_sim!
+
 # Backward compatibility for extensions
 if !isdefined(Base, :get_extension)
     using Requires
@@ -119,6 +123,7 @@ function __init__()
     @static if !isdefined(Base, :get_extension)
         @require AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e" include("../ext/IntfAdvAMDGPUExt.jl")
         @require CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba" include("../ext/IntfAdvCUDAExt.jl")
+        @require ReadVTK = "dc215faf-f008-4882-a9f7-a79a826fadc3" include("../ext/IntfAdvReadVTKExt.jl")
     end
 end
 
