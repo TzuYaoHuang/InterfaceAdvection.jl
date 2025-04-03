@@ -100,6 +100,77 @@ lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
     Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
 upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
+function advectρuu1D!(q, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ, d, δt; perdir=())
+    N,D = size_u(u)
+    r .= 0
+    j = d
+    @loop dilaU[I] = (∂(d,I,u)+∂(d,I,u⁰))/2
+    BCf!(dilaU;perdir)
+    for i∈1:D
+        tagper = (j∈perdir)
+        # treatment for bottom boundary with BCs
+        lowerBoundaryρuu!(r,uStar,ρuf,Φ,i,j,N,Val{tagper}())
+        # inner cells
+        @loop (Φ[I] = ϕu(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf));
+                r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
+        @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
+        # treatment for upper boundary with BCs
+        upperBoundaryρuu!(r,u,ρuf,Φ,i,j,N,Val{tagper}())
+
+        @loop r[I,i] += uOld[I,i] * (getρ(I,c̄,λρ)*dilaU[I] + getρ(I-δ(i,I),c̄,λρ)*dilaU[I-δ(i,I)])/2 over I ∈ inside(Φ)
+    end
+    @loop q[Ii] += r[Ii]*δt over Ii∈CartesianIndices(q)
+end
+
+# Neumann BC Building block
+lowerBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{false}) = @loop r[I,i] += ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) over I ∈ slice(N,2,j,2)
+upperBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) over I ∈ slice(N,N[j],j,2)
+
+# Periodic BC Building block
+lowerBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{true}) = @loop (
+    Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf)); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
+upperBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
+
+function advectVOFρuu!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; perdir=(),exitBC=false,U=[]) where {T,D}
+    tol = 10eps(T)
+
+    # get for dilation term
+    @loop c̄[I] = ifelse(f[I]<0.5,0,1) over I ∈ CartesianIndices(f)
+
+    dirOrder = shuffle(1:D)
+
+    # Operator splitting to avoid bias
+    # Reference for splitting method: http://www.othmar-koch.org/splitting/index.php
+
+    # Second-order Auzinger-Ketcheson
+    s2 = 1/√2
+    OpOrder = D==2 ? SVector{4,Int8}(1, 2, 1, 2) : SVector{6,Int8}(1, 2, 3, 2, 3, 1)
+    OpCoeff = D==2 ? SVector{4,T}(1-s2, s2, s2, 1-s2) : SVector{6,T}(1/2, 1-s2, s2, s2, 1-s2, 1/2)
+
+    # Second-order Strang
+    # OpOrder = D==2 ? SVector{3,Int8}(1, 2, 1) : SVector{5,Int8}(1, 2, 3, 2, 1)
+    # OpCoeff = D==2 ? SVector{3,T}(1/2, 1, 1/2) : SVector{5,T}(1/2, 1/2, 1, 1/2, 1/2)
+
+    # First-order Lie-Trotter
+    # OpOrder = D==2 ? SVector{2,Int8}(1, 2) : SVector{3,Int8}(1, 2, 3)
+    # OpCoeff = D==2 ? SVector{2,T}(1, 1) : SVector{3,T}(1, 1, 1)
+
+    for iOp∈eachindex(OpOrder)
+        d = dirOrder[OpOrder[iOp]]
+        δt = OpCoeff[iOp]*Δt
+
+        ρu2u!(uStar,ρu,f,λρ); BC!(uStar,U,exitBC,perdir)
+
+        # advect VOF field in d direction
+        ρuf .= 0
+        advectVOF1d!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ,d)
+
+        # advect uᵢ in d direction
+        ρuf ./= δt; BC!(ρuf,U,exitBC,perdir)
+        advectρuu1D!(q, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
+    end
+end
+
 
 function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U,w=1)
     @loop ρu[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(ρu)
