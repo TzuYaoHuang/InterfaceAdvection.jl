@@ -92,46 +92,24 @@ end
 @inline viscF(i,j,I,u,f,λμ,μ::Nothing,λρ) = zero(eltype(f))
 
 # Neumann BC Building block
-lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
-upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) + viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
+lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += - viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
+upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
 
 # Periodic BC Building block
 lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
-    Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf)) - viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
+    Φ[I] = -viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
 upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
-function advectρuu1D!(q, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ, d, δt; perdir=())
-    N,D = size_u(u)
-    r .= 0
-    j = d
-    @loop dilaU[I] = (∂(d,I,u)+∂(d,I,u⁰))/2
-    BCf!(dilaU;perdir)
-    for i∈1:D
-        tagper = (j∈perdir)
-        # treatment for bottom boundary with BCs
-        lowerBoundaryρuu!(r,uStar,ρuf,Φ,i,j,N,Val{tagper}())
-        # inner cells
-        @loop (Φ[I] = ϕu(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf));
-                r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
-        @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
-        # treatment for upper boundary with BCs
-        upperBoundaryρuu!(r,u,ρuf,Φ,i,j,N,Val{tagper}())
+advectfq!(a::Flow{D}, c::cVOF, U, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[end]) where {D} = advectVOFρuu!(
+    f, c.fᶠ, c.α, c.n̂, u¹, u², dt, c.c̄,
+    c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.λρ, U;
+    U, a.exitBC
+)
 
-        @loop r[I,i] += uOld[I,i] * (getρ(I,c̄,λρ)*dilaU[I] + getρ(I-δ(i,I),c̄,λρ)*dilaU[I-δ(i,I)])/2 over I ∈ inside(Φ)
-    end
-    @loop q[Ii] += r[Ii]*δt over Ii∈CartesianIndices(q)
-end
-
-# Neumann BC Building block
-lowerBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{false}) = @loop r[I,i] += ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) over I ∈ slice(N,2,j,2)
-upperBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) over I ∈ slice(N,N[j],j,2)
-
-# Periodic BC Building block
-lowerBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{true}) = @loop (
-    Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf)); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
-upperBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
-
-function advectVOFρuu!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; perdir=(),exitBC=false,U=[]) where {T,D}
+function advectVOFρuu!(
+    f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,
+    ρu, r, Φ, ρuf, uStar, uOld, dilaU, λρ, U; 
+    perdir=(),exitBC=false) where {T,D}
     tol = 10eps(T)
 
     # get for dilation term
@@ -163,13 +141,44 @@ function advectVOFρuu!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λ
 
         # advect VOF field in d direction
         ρuf .= 0
-        advectVOF1d!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ,d)
+        advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir)
 
         # advect uᵢ in d direction
         ρuf ./= δt; BC!(ρuf,U,exitBC,perdir)
-        advectρuu1D!(q, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
+        advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
     end
 end
+
+function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ, d, δt; perdir=())
+    N,D = size_u(u)
+    r .= 0
+    j = d
+    @loop dilaU[I] = (∂(d,I,u)+∂(d,I,u⁰))/2
+    BCf!(dilaU;perdir)
+    for i∈1:D
+        tagper = (j∈perdir)
+        # treatment for bottom boundary with BCs
+        lowerBoundaryρuu!(r,uStar,ρuf,Φ,i,j,N,Val{tagper}())
+        # inner cells
+        @loop (Φ[I] = ϕu(j,CI(I,i),uStar,ϕ(i,CI(I,j),ρuf));
+                r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
+        @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
+        # treatment for upper boundary with BCs
+        upperBoundaryρuu!(r,uStar,ρuf,Φ,i,j,N,Val{tagper}())
+
+        @loop r[I,i] += uOld[I,i] * (getρ(I,c̄,λρ)*dilaU[I] + getρ(I-δ(i,I),c̄,λρ)*dilaU[I-δ(i,I)])/2 over I ∈ inside(Φ)
+    end
+    @loop ρu[Ii] += r[Ii]*δt over Ii∈CartesianIndices(q)
+end
+
+# Neumann BC Building block
+lowerBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{false}) = @loop r[I,i] += ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) over I ∈ slice(N,2,j,2)
+upperBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) over I ∈ slice(N,N[j],j,2)
+
+# Periodic BC Building block
+lowerBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{true}) = @loop (
+    Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf)); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
+upperBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
 function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U,w=1)
