@@ -109,7 +109,7 @@ upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I)
 advectfq!(a::Flow{D}, c::cVOF, U, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[end]) where {D} = advectVOFρuu!(
     f, c.fᶠ, c.α, c.n̂, u¹, u², dt, c.c̄,
     c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.λρ, U;
-    U, a.exitBC
+    perdir=a.perdir, exitBC=a.exitBC
 )
 
 function advectVOFρuu!(
@@ -147,7 +147,7 @@ function advectVOFρuu!(
 
         # advect VOF field in d direction
         ρuf .= 0
-        advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir)
+        advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
 
         # advect uᵢ in d direction
         ρuf ./= δt; BC!(ρuf,U,exitBC,perdir)
@@ -159,7 +159,7 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ,
     N,D = size_u(u)
     r .= 0
     j = d
-    @loop dilaU[I] = (∂(d,I,u)+∂(d,I,u⁰))/2
+    @loop dilaU[I] = (∂(d,I,u)+∂(d,I,u⁰))/2 over I∈inside(Φ)
     BCf!(dilaU;perdir)
     for i∈1:D
         tagper = (j∈perdir)
@@ -174,7 +174,7 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ,
 
         @loop r[I,i] += uOld[I,i] * (getρ(I,c̄,λρ)*dilaU[I] + getρ(I-δ(i,I),c̄,λρ)*dilaU[I-δ(i,I)])/2 over I ∈ inside(Φ)
     end
-    @loop ρu[Ii] += r[Ii]*δt over Ii∈CartesianIndices(q)
+    @loop ρu[Ii] += r[Ii]*δt over Ii∈CartesianIndices(ρu)
 end
 
 # Neumann BC Building block
