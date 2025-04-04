@@ -29,14 +29,17 @@ end
     @log "p"
     dtCoeff = T(1/2)
     dtList = @view(a.Δt[1:end-1])
+
     U = BCTuple(a.U,dtList,D)
     u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
-    advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
+    advectfq!(a, c, U, c.f⁰, a.u⁰, a.u, a.u, a.Δt[end])
+
     # TODO: include measure
     a.μ₀ .= 1
     @. c.f⁰ = (c.f⁰+c.f)/2
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
-    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+    u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
+    updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
@@ -46,16 +49,19 @@ end
 
     # corrector u(n) → u(n+1) with u(n+1/2∘)
     @log "c"
+    c.f⁰ .= c.f
+
     U = BCTuple(a.U,a.Δt,D)
-    # recover ρu @ t = n since it is modified for the predictor step
     u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
-    advect!(a,c,c.f,a.u,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
+    advectfq!(a, c, U, c.f, a.u, a.u, a.u⁰, a.Δt[end])
+    
     # TODO: include measure
     a.μ₀ .= 1
     # TODO: viscous term and surface tension term should be evaluated 
     # at the end of time step to avoid divide by wrong ρ
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
-    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
+    updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
@@ -181,8 +187,9 @@ lowerBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{true}) = @loop (
 upperBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
-function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U,w=1)
-    @loop ρu[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(ρu)
+function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,ΔtList,g,U,w=1)
+    a = 1/w-1
+    @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)/(1+a) over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
     forcing .= 0
     accelerate!(forcing,ΔtList,g,U)
