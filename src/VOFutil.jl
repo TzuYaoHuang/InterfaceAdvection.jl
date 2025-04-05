@@ -80,6 +80,21 @@ function BCf!(d,f;perdir=())
     end
 end
 
+function BCv!(f;perdir=())
+    N = size(f)[1:end-1]; D = length(N)
+    for d∈1:D, j∈1:D
+        if j in perdir
+            @loop f[I,d] = f[CIj(j,I,N[j]-1),d] over I ∈ slice(N,1,j)
+            @loop f[I,d] = f[CIj(j,I,2),d] over I ∈ slice(N,N[j],j)
+        elseif j==d
+            @loop f[I,d] = f[I+2δ(j,I),d] over I ∈ slice(N,1,j)
+        else
+            @loop f[I,d] = f[I+δ(j,I),d] over I ∈ slice(N,1,j)
+            @loop f[I,d] = f[I-δ(j,I),d] over I ∈ slice(N,N[j],j)
+        end
+    end
+end
+
 """
     cleanWisp!(f; tol)
 
@@ -171,3 +186,7 @@ end
 Convert volume flux `fᶠ` @ `I` to mash flux.
 """
 @inline @fastmath fᶠ2ρuf(I,fᶠ,δl,λρ) = δl*λρ + (1-λρ)*fᶠ[I]
+
+@fastmath getρratio!(vec, fnew::AbstractArray{T,D}, fold, λρ) where {T,D} = for d∈1:D
+    @loop vec[I,d] = getρ(d,I,fnew,λρ)/getρ(d,I,fold,λρ) over I∈inside_uWB(size(fnew),d)
+end
