@@ -143,13 +143,15 @@ function advectVOFρuu!(
         d = dirOrder[OpOrder[iOp]]
         δt = OpCoeff[iOp]*Δt
 
-        ρu2u!(uStar,ρu,f,λρ); BC!(uStar,U,exitBC,perdir)
+        # uStar is c.n̂ which will be overwritten in advecVOF so better to be another vector field first.
+        ρu2u!(r,ρu,f,λρ); BC!(r,U,exitBC,perdir)
 
         # advect VOF field in d direction
         ρuf .= 0
         advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
 
         # advect uᵢ in d direction
+        uStar .= r
         ρuf ./= δt; BC!(ρuf,U,exitBC,perdir)
         advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
     end
