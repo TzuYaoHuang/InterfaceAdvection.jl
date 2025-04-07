@@ -24,6 +24,9 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
     ρu :: Vf  # momentum
     ρuf:: Vf  # mass flux from VOF advection
 
+    # Interface-aware Flux limiter
+    dρ :: AbstractArray{Int8} # face-center density change indicator
+
     # physical properties
     μ  :: Union{T,Nothing}   # store dynamcs viscosity of dark fluid (corresponding to ν)
     λρ :: T   # density ratio = light/dark fluid
@@ -61,6 +64,9 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         ρu = zeros(T,Nv) |> arr
         ρuf= zeros(T,Nv) |> arr
 
+        # Interface-aware Flux limiter
+        dρ = ones(Int8,Nv) |> arr
+
         # correct η
         ηc = ifelse(η==0,nothing,η)
         μc = ifelse(μ==0,nothing,μ)
@@ -68,6 +74,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         new{D,T,typeof(f),typeof(n̂)}(
             f, f⁰, α, n̂, fᶠ, c̄,
             ρu, ρuf,
+            dρ,
             μc, λρ, λμ, ηc,
             perdir
         )

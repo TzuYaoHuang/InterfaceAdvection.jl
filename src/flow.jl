@@ -12,13 +12,17 @@ import LinearAlgebra: ⋅
     α,β = c-u,d-c
     return c+max(α*β,0)*ifelse(α==β && α==0, 0, (α+β)/(α^2+β^2))/2
 end
+@fastmath Sweby(u,c,d,γ=1.5,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*max(0, min(s*γ*(c-u),s*(d-c)), min(s*(c-u),s*γ*(d-c)))/2
+@inline superbee(u,c,d) = Sweby(u,c,d,2)
+
 
 @inline limiter(u,c,d) = trueKoren(u,c,d)
+limiterSwitch(u,c,d,dρ,γ=0.5) = ifelse(dρ>γ, limiter(u,c,d), upwind(u,c,d))
 
-@inline ϕu(a,I,f,u,λ=limiter) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕuP(a,Ip,I,f,u,λ=limiter) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕuL(a,I,f,u,λ=limiter) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
-@inline ϕuR(a,I,f,u,λ=limiter) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I])
+@inline ϕu(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I])
+@inline ϕuP(a,Ip,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I])
+@inline ϕuL(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I])
+@inline ϕuR(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)])
 
 
 @fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
@@ -108,13 +112,13 @@ upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I)
 
 advectfq!(a::Flow{D}, c::cVOF, U, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[end]) where {D} = advectVOFρuu!(
     f, c.fᶠ, c.α, c.n̂, u¹, u², dt, c.c̄,
-    c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.λρ, U;
+    c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.dρ, c.λρ, U;
     perdir=a.perdir, exitBC=a.exitBC
 )
 
 function advectVOFρuu!(
     f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,
-    ρu, r, Φ, ρuf, uStar, uOld, dilaU, λρ, U; 
+    ρu, r, Φ, ρuf, uStar, uOld, dilaU, dρ, λρ, U; 
     perdir=(),exitBC=false) where {T,D}
     tol = 10eps(T)
 
@@ -146,18 +150,21 @@ function advectVOFρuu!(
         # uStar is c.n̂ which will be overwritten in advecVOF so better to be another vector field first.
         ρu2u!(r,ρu,f,λρ); BC!(r,U,exitBC,perdir)
 
+        Φ .= f  # store old volume fraction
         # advect VOF field in d direction
         ρuf .= 0
         advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
 
+        getρratio!(dρ,f,Φ,λρ); BCv!(dρ; perdir)
+
         # advect uᵢ in d direction
         uStar .= r
         ρuf ./= δt; BC!(ρuf,U,exitBC,perdir)
-        advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
+        advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, dρ, λρ, d, δt; perdir)
     end
 end
 
-function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ, d, δt; perdir=())
+function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, dρ, λρ, d, δt; perdir=())
     N,D = size_u(u)
     r .= 0
     j = d
@@ -166,13 +173,13 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ,
     for i∈1:D
         tagper = (j∈perdir)
         # treatment for bottom boundary with BCs
-        lowerBoundaryρuu!(r,uStar,ρuf,Φ,i,j,N,Val{tagper}())
+        lowerBoundaryρuu!(r,uStar,ρuf,Φ,dρ,i,j,N,Val{tagper}())
         # inner cells
-        @loop (Φ[I] = ϕu(j,CI(I,i),uStar,ϕ(i,CI(I,j),ρuf));
+        @loop (Φ[I] = ϕu(j,CI(I,i),uStar,ϕ(i,CI(I,j),ρuf),dρ);
                 r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
         @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
         # treatment for upper boundary with BCs
-        upperBoundaryρuu!(r,uStar,ρuf,Φ,i,j,N,Val{tagper}())
+        upperBoundaryρuu!(r,uStar,ρuf,Φ,dρ,i,j,N,Val{tagper}())
 
         @loop r[I,i] += uOld[I,i] * (getρ(I,c̄,λρ)*dilaU[I] + getρ(I-δ(i,I),c̄,λρ)*dilaU[I-δ(i,I)])/2 over I ∈ inside(Φ)
     end
@@ -180,13 +187,13 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, λρ,
 end
 
 # Neumann BC Building block
-lowerBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{false}) = @loop r[I,i] += ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) over I ∈ slice(N,2,j,2)
-upperBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf)) over I ∈ slice(N,N[j],j,2)
+lowerBoundaryρuu!(r,u,ρuf,Φ,dρ,i,j,N,::Val{false}) = @loop r[I,i] += ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf),dρ) over I ∈ slice(N,2,j,2)
+upperBoundaryρuu!(r,u,ρuf,Φ,dρ,i,j,N,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf),dρ) over I ∈ slice(N,N[j],j,2)
 
 # Periodic BC Building block
-lowerBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{true}) = @loop (
-    Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf)); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
-upperBoundaryρuu!(r,u,ρuf,Φ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
+lowerBoundaryρuu!(r,u,ρuf,Φ,dρ,i,j,N,::Val{true}) = @loop (
+    Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf),dρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
+upperBoundaryρuu!(r,u,ρuf,Φ,dρ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
 function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,ΔtList,g,U,w=1)
