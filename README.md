@@ -19,3 +19,4 @@
 
 - [ ] Implement an interface-aware geometric multigrid solver to accelerate pressure convergence and alleviate biased volume loss.
 - [ ] Reintroduce the boundary data immersion method, potentially with a Heun's predictor-corrector time integration scheme, but still consistent.
+- [ ] Fix problem on symmetry boundary condition on the ceiling under gravitational effect.
