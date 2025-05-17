@@ -1,4 +1,4 @@
-import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞
+import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, vanLeer
 import LinearAlgebra: ⋅
 
 @inline ϕ(a,I,f) = @inbounds (f[I]+f[I-δ(a,I)])/2
@@ -279,7 +279,7 @@ end
 @inline function inproject!(a::Flow{n,T},b::Poisson,dt) where {n,T}
     b.z .= 0; b.ϵ .= 0; b.r .= 0
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
-    psolver!(b;tol=sqrt(eps(T))/30,itmx=750)
+    psolver!(b;tol=50eps(T),itmx=2000)
 end
 
 @inline function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
