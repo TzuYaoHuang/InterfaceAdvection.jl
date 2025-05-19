@@ -16,7 +16,7 @@ end
 @inline superbee(u,c,d) = Sweby(u,c,d,2)
 
 
-@inline limiter(u,c,d) = superbee(u,c,d)
+@inline limiter(u,c,d) = trueKoren(u,c,d)
 limiterSwitch(u,c,d,dρ,γ=0.5) = ifelse(dρ>γ, limiter(u,c,d), upwind(u,c,d))
 
 @inline ϕu(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I])
@@ -190,7 +190,7 @@ end
 @inline function inproject!(a::Flow{n,T},b::Poisson,dt) where {n,T}
     b.z .= 0; b.ϵ .= 0; b.r .= 0
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
-    psolver!(b;tol=sqrt(eps(T))/30,itmx=750)
+    psolver!(b;tol=50eps(T),itmx=2000)
 end
 
 @inline function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
