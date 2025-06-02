@@ -153,9 +153,7 @@ function advectVOFρuu!(
         Φ .= f  # store old volume fraction
         # advect VOF field in d direction
         ρuf .= 0
-        advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
-
-        getρratio!(dρ,f,Φ,λρ); BCv!(dρ; perdir)
+        advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d,dρ,Φ; perdir, tol)
 
         # advect uᵢ in d direction
         uStar .= r
