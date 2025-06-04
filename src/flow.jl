@@ -1,4 +1,4 @@
-import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, vanLeer
+import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞
 import LinearAlgebra: ⋅
 
 @inline ϕ(a,I,f) = @inbounds (f[I]+f[I-δ(a,I)])/2
@@ -34,7 +34,7 @@ limiterSwitch(u,c,d,dρ,γ=0.5) = ifelse(dρ>γ, limiter(u,c,d), upwind(u,c,d))
     dtCoeff = T(1/2)
     dtList = @view(a.Δt[1:end-1])
 
-    U = BCTuple(a.U,dtList,D)
+    U = BCTuple(a.uBC,dtList,D)
     u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
     advectfq!(a, c, U, c.f⁰, a.u⁰, a.u, a.u, a.Δt[end])
 
@@ -43,7 +43,7 @@ limiterSwitch(u,c,d,dρ,γ=0.5) = ifelse(dρ>γ, limiter(u,c,d), upwind(u,c,d))
     @. c.f⁰ = (c.f⁰+c.f)/2
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
-    updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.uBC,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
@@ -55,7 +55,7 @@ limiterSwitch(u,c,d,dρ,γ=0.5) = ifelse(dρ>γ, limiter(u,c,d), upwind(u,c,d))
     @log "c"
     c.f⁰ .= c.f
 
-    U = BCTuple(a.U,a.Δt,D)
+    U = BCTuple(a.uBC,a.Δt,D)
     u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
     advectfq!(a, c, U, c.f, a.u, a.u, a.u⁰, a.Δt[end])
     
@@ -65,7 +65,7 @@ limiterSwitch(u,c,d,dρ,γ=0.5) = ifelse(dρ>γ, limiter(u,c,d), upwind(u,c,d))
     # at the end of time step to avoid divide by wrong ρ
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
-    updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.uBC); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
@@ -287,3 +287,7 @@ end
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
     solver!(b;tol=10000eps(T),itmx=1e3)
 end
+
+# TODO: Still need to converge to the WaterLily method. This is only temporary approach.
+BCTuple(f::Function,dt,N,t=sum(dt))=ntuple(i->f(i,t),N)
+BCTuple(f::Tuple,dt,N)=f

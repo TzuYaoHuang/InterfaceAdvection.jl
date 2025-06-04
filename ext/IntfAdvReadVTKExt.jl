@@ -7,7 +7,7 @@ else
 end
 
 using WaterLily
-import InterfaceAdvection: TwoPhaseSimulation, restart_sim!
+import InterfaceAdvection: TwoPhaseSimulation, load!
 
 """
     components_last(a::Array)
@@ -26,16 +26,19 @@ the simulation can be restarted and continued.
 """
 squeeze(a::AbstractArray) = dropdims(a,dims=tuple(findall(size(a).==1)...))
 
-function restart_sim!(a::TwoPhaseSimulation;fname::String="WaterLily.pvd",attrib=default_attrib())
+function load!(a::TwoPhaseSimulation, ::Val{:pvd}; kwargs...)
+    kwargs_dict = Dict(kwargs)
+    fname = get(kwargs_dict, :fname, "WaterLily.pvd")
+    attrib = get(kwargs_dict, :attrib, default_attrib())
     vtk = VTKFile(PVDFile(fname).vtk_filenames[end])
-    extent = filter(!iszero,ReadVTK.get_whole_extent(vtk)[2:2:end]); 
+    extent = filter(!iszero,ReadVTK.get_whole_extent(vtk)[2:2:end]);
     # check dimensions match
-    text = "The dimensions of the simulation do not match the dimensions of the vtk file"
+    text = "The dimensions of the simulation do not match the dimensions of the vtk file."
     @assert extent.+1 == collect(size(a.flow.p)) text
-    # fill the arrays for pressure and velocity
+    # fill the arrays for pressure and velocity and volume fraction
     point_data = ReadVTK.get_point_data(vtk)
     copyto!(a.flow.p, squeeze(Array(get_data_reshaped(point_data["p"]))));
-    copyto!(a.intf.f, squeeze(Array(get_data_reshaped(point_data["f"]))));
+    ("f" in point_data.names) && copyto!(a.intf.f, squeeze(Array(get_data_reshaped(point_data["f"]))));
     copyto!(a.flow.u, squeeze(components_last(Array(get_data_reshaped(point_data["u"])))));
     # reset time to work with the new time step
     a.flow.Δt[end] = PVDFile(fname).timesteps[end]*a.L/a.U
