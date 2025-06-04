@@ -1,4 +1,4 @@
-import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞
+import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞
 import LinearAlgebra: ⋅
 
 @inline ϕ(a,I,f) = @inbounds (f[I]+f[I-δ(a,I)])/2
@@ -29,14 +29,14 @@ end
     @log "p"
     dtCoeff = T(1/2)
     dtList = @view(a.Δt[1:end-1])
-    U = BCTuple(a.U,dtList,D)
+    U = BCTuple(a.uBC,dtList,D)
     u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
     advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
     @. c.f⁰ = (c.f⁰+c.f)/2
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
-    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.uBC,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
@@ -46,7 +46,7 @@ end
 
     # corrector u(n) → u(n+1) with u(n+1/2∘)
     @log "c"
-    U = BCTuple(a.U,a.Δt,D)
+    U = BCTuple(a.uBC,a.Δt,D)
     # recover ρu @ t = n since it is modified for the predictor step
     u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
     advect!(a,c,c.f,a.u,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
@@ -55,7 +55,7 @@ end
     # TODO: viscous term and surface tension term should be evaluated 
     # at the end of time step to avoid divide by wrong ρ
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
-    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.uBC); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
@@ -191,3 +191,7 @@ end
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
     solver!(b;tol=10000eps(T),itmx=1e3)
 end
+
+# TODO: Still need to converge to the WaterLily method. This is only temporary approach.
+BCTuple(f::Function,dt,N,t=sum(dt))=ntuple(i->f(i,t),N)
+BCTuple(f::Tuple,dt,N)=f
