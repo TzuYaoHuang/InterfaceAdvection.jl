@@ -1,4 +1,4 @@
-import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞
+import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞
 import LinearAlgebra: ⋅
 
 @inline ϕ(a,I,f) = @inbounds (f[I]+f[I-δ(a,I)])/2
@@ -33,7 +33,7 @@ limiterSwitch(u,c,d,dρ,γ=0.5) = ifelse(dρ>γ, limiter(u,c,d), upwind(u,c,d))
     @log "p"
     dtCoeff = T(1/2)
     dtList = @view(a.Δt[1:end-1])
-    U = BCTuple(a.U,dtList,D)
+    U = BCTuple(a.uBC,dtList,D)
     u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
     advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     # TODO: include measure
@@ -198,3 +198,7 @@ end
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
     solver!(b;tol=10000eps(T),itmx=1e3)
 end
+
+# TODO: Still need to converge to the WaterLily method. This is only temporary approach.
+BCTuple(f::Function,dt,N,t=sum(dt))=ntuple(i->f(i,t),N)
+BCTuple(f::Tuple,dt,N)=f

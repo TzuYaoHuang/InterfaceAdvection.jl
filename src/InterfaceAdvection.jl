@@ -111,9 +111,9 @@ end
 
 export sim_step!
 
-import WaterLily: restart_sim!
-function restart_sim! end
-export restart_sim!
+import WaterLily: load!
+function load! end
+export load!
 
 # Backward compatibility for extensions
 if !isdefined(Base, :get_extension)
