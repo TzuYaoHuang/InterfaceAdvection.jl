@@ -41,7 +41,7 @@ limiterSwitch(u,c,d,dρ,γ=0.5) = ifelse(dρ>γ, limiter(u,c,d), upwind(u,c,d))
     getρratio!(c.n̂, c.f⁰, c.f, c.λρ); BCv!(c.n̂;perdir=a.perdir)
     @. c.f⁰ = (c.f⁰+c.f)/2
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η,c.n̂;perdir=a.perdir)
-    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.uBC,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
@@ -51,7 +51,7 @@ limiterSwitch(u,c,d,dρ,γ=0.5) = ifelse(dρ>γ, limiter(u,c,d), upwind(u,c,d))
 
     # corrector u(n) → u(n+1) with u(n+1/2∘)
     @log "c"
-    U = BCTuple(a.U,a.Δt,D)
+    U = BCTuple(a.uBC,a.Δt,D)
     c.f⁰ .= c.f
     # recover ρu @ t = n since it is modified for the predictor step
     u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
@@ -62,7 +62,7 @@ limiterSwitch(u,c,d,dρ,γ=0.5) = ifelse(dρ>γ, limiter(u,c,d), upwind(u,c,d))
     # TODO: viscous term and surface tension term should be evaluated 
     # at the end of time step to avoid divide by wrong ρ
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η,c.n̂;perdir=a.perdir) 
-    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.uBC); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
