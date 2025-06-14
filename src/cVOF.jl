@@ -25,7 +25,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
     ρuf:: Vf  # mass flux from VOF advection
 
     # Interface-aware Flux limiter
-    dρ :: AbstractArray{Int8} # face-center density change indicator
+    dρ :: Vf # face-center density change indicator
 
     # physical properties
     μ  :: Union{T,Nothing}   # store dynamcs viscosity of dark fluid (corresponding to ν)
@@ -65,7 +65,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         ρuf= zeros(T,Nv) |> arr
 
         # Interface-aware Flux limiter
-        dρ = ones(Int8,Nv) |> arr
+        dρ = ones(T,Nv) |> arr
 
         # correct η
         ηc = ifelse(η==0,nothing,η)
