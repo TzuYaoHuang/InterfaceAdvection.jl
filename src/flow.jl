@@ -14,13 +14,28 @@ import LinearAlgebra: ⋅
 end
 @fastmath Sweby(u,c,d,γ=1.5,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*max(0, min(s*γ*(c-u),s*(d-c)), min(s*(c-u),s*γ*(d-c)))/2
 @inline superbee(u,c,d) = Sweby(u,c,d,2)
+@fastmath TVDcen(u,c,d,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*min(s*(c-u),s*(d-c)/2)
+@fastmath TVDdown(u,c,d,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*min(s*(c-u),s*(d-c))
 
 
 @inline limiter(u,c,d) = trueKoren(u,c,d)
-limiterSwitch(u,c,d,dρ,γ=0.5) = ifelse(dρ>γ, limiter(u,c,d), upwind(u,c,d))
+limiterSwitch(u::T,c,d,dρ,dρd,γ=0.5, γd=-Inf) where T = if 1-10eps(T)<dρ
+    ifelse(dρd > γd, limiter(u,c,d), TVDdown(u,c,d))
+elseif γ ≤ dρ < 1
+    ifelse(dρd > γd, limiter(u,c,d), TVDcen(u,c,d))
+else
+    ifelse(dρd > γd, upwind(u,c,d), TVDcen(u,c,d))
+end
 
-@inline ϕu(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I])
-@inline ϕuP(a,Ip,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I])
+
+limiterSmooth(u::T,c,d,dρ,β=clamp(dρ,0,1-eps(T)),s=sign(d-u),θ=T(0.5)) where T = if (c≤min(u,d) || c≥max(u,d)) 
+    c
+else
+    c + s*min(s*(limiter(u,c,d)-c), s*β/(1-β)*θ*(c-u)) # s*β/(1-β)*θ*(c-u)
+end
+
+@inline ϕu(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)],dρ[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I],dρ[I-δ(a,I)])
+@inline ϕuP(a,Ip,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)],dρ[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I],dρ[I-δ(a,I)])
 @inline ϕuL(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I])
 @inline ϕuR(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)])
 
