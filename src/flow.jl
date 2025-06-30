@@ -19,7 +19,7 @@ end
 
 
 @inline limiter(u,c,d) = trueKoren(u,c,d)
-limiterSwitch(u::T,c,d,dρ,dρd,γ=0.5, γd=-Inf) where T = if 1-10eps(T)<dρ
+limiterSwitch(u::T,c,d,dρ,dρd,γ=0.51, γd=-Inf) where T = if 1-10eps(T)<dρ
     ifelse(dρd > γd, limiter(u,c,d), TVDdown(u,c,d))
 elseif γ ≤ dρ < 1
     ifelse(dρd > γd, limiter(u,c,d), TVDcen(u,c,d))
@@ -36,32 +36,31 @@ end
 
 @inline ϕu(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)],dρ[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I],dρ[I-δ(a,I)])
 @inline ϕuP(a,Ip,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)],dρ[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I],dρ[I-δ(a,I)])
-@inline ϕuL(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I])
-@inline ϕuR(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)])
+@inline ϕuL(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I],dρ[I-δ(a,I)])
+@inline ϕuR(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)],dρ[I])
 
 
 @fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
     a.u⁰ .= a.u; c.f⁰ .= c.f
+    t₁ = sum(a.Δt); t₀ = t₁-δt; tₘ = t₁-δt/2
     # TODO: check if BC doable for ρu
 
     # predictor u(n) → u(n+1/2∘) with u(n)
     @log "p"
     dtCoeff = T(1/2)
-    dtList = @view(a.Δt[1:end-1])
 
-    U = BCTuple(a.uBC,dtList,D)
-    u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
-    advectfq!(a, c, U, c.f⁰, a.u⁰, a.u, a.u, a.Δt[end])
+    u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,a.uBC,a.exitBC,a.perdir)
+    advectfq!(a, c, c.f⁰, a.u⁰, a.u, a.u, δt)
 
     # TODO: include measure
     a.μ₀ .= 1
     @. c.f⁰ = (c.f⁰+c.f)/2
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
-    updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.uBC,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,tₘ,a.g,a.uBC,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
-    myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+    myproject!(a,b,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
 
     # c.f .= c.f⁰
     # a.u .= a.u⁰
@@ -70,9 +69,8 @@ end
     @log "c"
     c.f⁰ .= c.f
 
-    U = BCTuple(a.uBC,a.Δt,D)
-    u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
-    advectfq!(a, c, U, c.f, a.u, a.u, a.u⁰, a.Δt[end])
+    u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,a.uBC,a.exitBC,a.perdir)
+    advectfq!(a, c, c.f, a.u, a.u, a.u⁰, δt)
     
     # TODO: include measure
     a.μ₀ .= 1
@@ -80,12 +78,12 @@ end
     # at the end of time step to avoid divide by wrong ρ
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
-    updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.uBC); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
-    myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
+    myproject!(a,b); BC!(a.u,a.uBC,a.exitBC,a.perdir)
 
-    push!(a.Δt,min(MPCFL(a,c),1.2a.Δt[end]))
+    push!(a.Δt,min(MPCFL(a,c),1.2δt))
 end
 
 # Forcing with the unit of ρu instead of u
@@ -125,15 +123,15 @@ lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
     Φ[I] = -viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
 upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
-advectfq!(a::Flow{D}, c::cVOF, U, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[end]) where {D} = advectVOFρuu!(
+advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[end]) where {D} = advectVOFρuu!(
     f, c.fᶠ, c.α, c.n̂, u¹, u², dt, c.c̄,
-    c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.dρ, c.λρ, U;
+    c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.dρ, c.λρ, a.uBC;
     perdir=a.perdir, exitBC=a.exitBC
 )
 
 function advectVOFρuu!(
     f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,
-    ρu, r, Φ, ρuf, uStar, uOld, dilaU, dρ, λρ, U; 
+    ρu, r, Φ, ρuf, uStar, uOld, dilaU, dρ, λρ, uBC; 
     perdir=(),exitBC=false) where {T,D}
     tol = 10eps(T)
 
@@ -163,7 +161,7 @@ function advectVOFρuu!(
         δt = OpCoeff[iOp]*Δt
 
         # uStar is c.n̂ which will be overwritten in advecVOF so better to be another vector field first.
-        ρu2u!(r,ρu,f,λρ); BC!(r,U,exitBC,perdir)
+        ρu2u!(r,ρu,f,λρ); BC!(r,uBC,exitBC,perdir)
 
         Φ .= f  # store old volume fraction
         # advect VOF field in d direction
@@ -174,7 +172,7 @@ function advectVOFρuu!(
 
         # advect uᵢ in d direction
         uStar .= r
-        ρuf ./= δt; BC!(ρuf,U,exitBC,perdir)
+        ρuf ./= δt; BC!(ρuf,uBC,exitBC,perdir)
         advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, dρ, λρ, d, δt; perdir)
     end
 end
@@ -211,12 +209,12 @@ lowerBoundaryρuu!(r,u,ρuf,Φ,dρ,i,j,N,::Val{true}) = @loop (
 upperBoundaryρuu!(r,u,ρuf,Φ,dρ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
-function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,ΔtList,g,U,w=1)
+function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=1)
     a = 1/w-1
     @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)/(1+a) over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
     forcing .= 0
-    accelerate!(forcing,ΔtList,g,U)
+    accelerate!(forcing,tNow,g,uBC)
     @loop u[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(u)
 end
 
@@ -238,7 +236,7 @@ end
 
     @inside a.σ[I] = maxTotalFlux(I,a.u)
     Δt_cVOF = 1/2maximum(a.σ)
-    Δt_Grav = isnothing(a.g) ? Δt_max : 1/(2*√sum(i->a.g(i,timeNow)^2, 1:D))
+    Δt_Grav = isnothing(a.g) ? Δt_max : 1/(2*√sum(i->a.g(i,zeros(SVector{D,T}),timeNow)^2, 1:D))
     Δt_Visc = isnothing(c.μ) ? Δt_max : 3/(14*c.μ*max(1,c.λμ/c.λρ))
     Δt_SurfT = isnothing(c.η) ? Δt_max : sqrt((1+c.λρ)/(8π*c.η))  # 8 from kelli's code
 
@@ -302,7 +300,3 @@ end
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
     solver!(b;tol=10000eps(T),itmx=1e3)
 end
-
-# TODO: Still need to converge to the WaterLily method. This is only temporary approach.
-BCTuple(f::Function,dt,N,t=sum(dt))=ntuple(i->f(i,t),N)
-BCTuple(f::Tuple,dt,N)=f
