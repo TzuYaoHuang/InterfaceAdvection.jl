@@ -1,7 +1,6 @@
-import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞
+import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ
 import LinearAlgebra: ⋅
 
-@inline ϕ(a,I,f) = @inbounds (f[I]+f[I-δ(a,I)])/2
 # I need to re-define the flux limiter or else the TVD property cannot conserve
 @fastmath upwind(u,c,d) = c
 @fastmath cen(u,c,d) = (c+d)/2
@@ -19,12 +18,12 @@ end
 
 
 @inline limiter(u,c,d) = trueKoren(u,c,d)
-limiterSwitch(u::T,c,d,dρ,dρd,γ=0.51, γd=-Inf) where T = if 1-10eps(T)<dρ
-    ifelse(dρd > γd, limiter(u,c,d), TVDdown(u,c,d))
-elseif γ ≤ dρ < 1
-    ifelse(dρd > γd, limiter(u,c,d), TVDcen(u,c,d))
+limiterSwitch(u::T,c,d,dρ,dρd,γ=0.51, γd=-Inf) where T = if 10eps(T)>dρ
+    limiter(u,c,d)
+elseif dρ < γ
+    upwind(u,c,d)
 else
-    ifelse(dρd > γd, upwind(u,c,d), TVDcen(u,c,d))
+    limiter(u,c,d)
 end
 
 
