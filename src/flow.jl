@@ -18,13 +18,20 @@ end
 @fastmath TVDdown(u,c,d,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*min(s*(c-u),s*(d-c))
 
 
+@fastmath getρratio!(vec, fnew::AbstractArray{T,D}, fold, λρ) where {T,D} = for d∈1:D
+    @loop vec[I,d] = !(
+        (getρ(d,I,fnew,λρ)/getρ(d,I,fold,λρ) < 1) &&
+        (20eps(T)<ϕ(d,I,fold)<0.5)
+    ) over I∈inside_uWB(size(fnew),d)
+end
+
 @inline limiter(u,c,d) = trueKoren(u,c,d)
-limiterSwitch(u::T,c,d,dρ,dρd,γ=0.51, γd=-Inf) where T = if 1-10eps(T)<dρ
-    ifelse(dρd > γd, limiter(u,c,d), TVDdown(u,c,d))
-elseif γ ≤ dρ < 1
-    ifelse(dρd > γd, limiter(u,c,d), TVDcen(u,c,d))
-else
-    ifelse(dρd > γd, upwind(u,c,d), TVDcen(u,c,d))
+function limiterSwitch(u::T,c,d,dρ,dρd,γ=0.51, γd=-Inf) where T  
+    if dρ < 0.5
+        return upwind(u,c,d)
+    else
+        return limiter(u,c,d)
+    end
 end
 
 
