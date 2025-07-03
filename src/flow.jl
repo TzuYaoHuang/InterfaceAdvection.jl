@@ -168,7 +168,7 @@ function advectVOFρuu!(
         ρuf .= 0
         advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
 
-        getρratio!(dρ,f,Φ,λρ); BCv!(dρ; perdir)
+        getρratio!(dρ,Φ,ρuf,d,λρ); BCv!(dρ; perdir)# ρuf not scale yet
 
         # advect uᵢ in d direction
         uStar .= r
