@@ -18,7 +18,7 @@ end
 
 
 @inline limiter(u,c,d) = trueKoren(u,c,d)
-limiterSwitch(u::T,c,d,dρ,dρd,γ=0.51, γd=-Inf) where T = if dρ < γ
+limiterSwitch(u::T,c,d,dρ,dρd,γ=0.5, γd=-Inf) where T = if dρ < γ
     upwind(u,c,d)
 else
     limiter(u,c,d)
