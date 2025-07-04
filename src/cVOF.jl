@@ -47,6 +47,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         # Declare grid size
         Ng = N.+2
         Nv = (Ng...,D)
+        Nvv
 
         # Allocate essential variables
         f = ones(T,Ng) |> arr
@@ -62,10 +63,10 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
 
         # Energy conserving
         ρu = zeros(T,Nv) |> arr
-        ρuf= zeros(T,Nv) |> arr
+        ρuf= zeros(T,Ng..., D, D) |> arr # water, air
 
         # Interface-aware Flux limiter
-        dρ = ones(T,Nv) |> arr
+        dρ = ones(T,Ng..., D, D) |> arr
 
         # correct η
         ηc = ifelse(η==0,nothing,η)

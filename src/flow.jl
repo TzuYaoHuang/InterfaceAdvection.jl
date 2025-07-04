@@ -1,5 +1,6 @@
 import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ
 import LinearAlgebra: ⋅
+using EllipsisNotation
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
 @fastmath upwind(u,c,d) = c
@@ -132,6 +133,11 @@ function advectVOFρuu!(
     perdir=(),exitBC=false) where {T,D}
     tol = 10eps(T)
 
+    dρ_w = @view dρ[..,1]
+    dρ_a = @view dρ[..,2]
+    ρuf_w = @view ρuf[..,1]
+    ρuf_a = @view ρuf[..,2]
+
     # get for dilation term
     @loop c̄[I] = ifelse(f[I]<0.5,0,1) over I ∈ CartesianIndices(f)
 
@@ -165,16 +171,16 @@ function advectVOFρuu!(
         ρuf .= 0
         advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
 
-        getρratio!(dρ,f,Φ,λρ); BCv!(dρ; perdir)
+        getρratio!(dρ,f,Φ,λρ); BCv!(dρ_w; perdir); BCv!(dρ_a; perdir)
 
         # advect uᵢ in d direction
         uStar .= r
-        ρuf ./= δt; BC!(ρuf,uBC,exitBC,perdir)
-        advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, dρ, λρ, d, δt; perdir)
+        ρuf ./= δt; BC!(ρuf_w,uBC,exitBC,perdir); BC!(ρuf_a,uBC,exitBC,perdir)
+        advectρuu1D!(ρu, r, Φ, ρuf_w, ρuf_a, uStar, uOld, dilaU, u, u⁰, c̄, dρ_w, dρ_a, λρ, d, δt; perdir)
     end
 end
 
-function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, dρ, λρ, d, δt; perdir=())
+function advectρuu1D!(ρu, r, Φ, ρuf_w, ρuf_a, uStar, uOld, dilaU, u, u⁰, c̄, dρ_w, dρ_a, λρ, d, δt; perdir=())
     N,D = size_u(u)
     r .= 0
     j = d
@@ -183,13 +189,13 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, dρ, 
     for i∈1:D
         tagper = (j∈perdir)
         # treatment for bottom boundary with BCs
-        lowerBoundaryρuu!(r,uStar,ρuf,Φ,dρ,i,j,N,Val{tagper}())
+        lowerBoundaryρuu!(r,uStar,ρuf_w,ρuf_a,Φ,dρ_w,dρ_a,i,j,N,Val{tagper}())
         # inner cells
-        @loop (Φ[I] = ϕu(j,CI(I,i),uStar,ϕ(i,CI(I,j),ρuf),dρ);
+        @loop (Φ[I] = ϕu(j,CI(I,i),uStar,ϕ(i,CI(I,j),ρuf_w),dρ_w) + ϕu(j,CI(I,i),uStar,ϕ(i,CI(I,j),ρuf_a),dρ_a);
                 r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
         @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
         # treatment for upper boundary with BCs
-        upperBoundaryρuu!(r,uStar,ρuf,Φ,dρ,i,j,N,Val{tagper}())
+        upperBoundaryρuu!(r,uStar,ρuf_w,ρuf_a,Φ,dρ_w,dρ_a,i,j,N,Val{tagper}())
 
         @loop r[I,i] += uOld[I,i] * (getρ(I,c̄,λρ)*dilaU[I] + getρ(I-δ(i,I),c̄,λρ)*dilaU[I-δ(i,I)])/2 over I ∈ inside(Φ)
     end
@@ -197,13 +203,14 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dilaU, u, u⁰, c̄, dρ, 
 end
 
 # Neumann BC Building block
-lowerBoundaryρuu!(r,u,ρuf,Φ,dρ,i,j,N,::Val{false}) = @loop r[I,i] += ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf),dρ) over I ∈ slice(N,2,j,2)
-upperBoundaryρuu!(r,u,ρuf,Φ,dρ,i,j,N,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf),dρ) over I ∈ slice(N,N[j],j,2)
+lowerBoundaryρuu!(r,u,ρuf_w,ρuf_a,Φ,dρ_w,dρ_a,i,j,N,::Val{false}) = @loop r[I,i] += ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf_w),dρ_w)+ϕuL(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf_a),dρ_a) over I ∈ slice(N,2,j,2)
+upperBoundaryρuu!(r,u,ρuf_w,ρuf_a,Φ,dρ_w,dρ_a,i,j,N,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf_w),dρ_w)-ϕuR(j,CI(I,i),u,ϕ(i,CI(I,j),ρuf_a),dρ_a) over I ∈ slice(N,N[j],j,2)
 
 # Periodic BC Building block
-lowerBoundaryρuu!(r,u,ρuf,Φ,dρ,i,j,N,::Val{true}) = @loop (
-    Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf),dρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
-upperBoundaryρuu!(r,u,ρuf,Φ,dρ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
+lowerBoundaryρuu!(r,u,ρuf_w,ρuf_a,Φ,dρ_w,dρ_a,i,j,N,::Val{true}) = @loop (
+    Φ[I] = ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf_w),dρ_w)+ϕuP(j,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,ϕ(i,CI(I,j),ρuf_a),dρ_a); 
+    r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
+upperBoundaryρuu!(r,u,ρuf_w,ρuf_a,Φ,dρ_w,dρ_a,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
 function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=1)
