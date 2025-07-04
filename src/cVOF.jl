@@ -10,7 +10,7 @@ The primary variable is the volume fraction of the heavy fluid, the cell-average
 We use Piecewise Linear Interface Calculation (PLIC) to reconstruct sharp interface. 
 The dark fluid is indicated with negative distance. That is to say, the normal is pointed into the light fluid.
 """
-struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
+struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}, Tf<:AbstractArray{T}}
 
     # field variable
     f  :: Sf  # volume fraction
@@ -22,10 +22,10 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
 
     # Varable for energy-conserving scheme
     ρu :: Vf  # momentum
-    ρuf:: Vf  # mass flux from VOF advection
+    ρuf:: Tf  # mass flux from VOF advection
 
     # Interface-aware Flux limiter
-    dρ :: Vf # face-center density change indicator
+    dρ :: Tf # face-center density change indicator
 
     # physical properties
     μ  :: Union{T,Nothing}   # store dynamcs viscosity of dark fluid (corresponding to ν)
@@ -47,7 +47,6 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         # Declare grid size
         Ng = N.+2
         Nv = (Ng...,D)
-        Nvv
 
         # Allocate essential variables
         f = ones(T,Ng) |> arr
@@ -63,10 +62,10 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
 
         # Energy conserving
         ρu = zeros(T,Nv) |> arr
-        ρuf= zeros(T,Ng..., D, D) |> arr # water, air
+        ρuf= zeros(T,Ng..., D, 2) |> arr # water, air
 
         # Interface-aware Flux limiter
-        dρ = ones(T,Ng..., D, D) |> arr
+        dρ = ones(T,Ng..., D, 2) |> arr
 
         # correct η
         ηc = ifelse(η==0,nothing,η)
@@ -74,7 +73,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
 
         println("μ: $(μc), λρ: $(λρ)")
 
-        new{D,T,typeof(f),typeof(n̂)}(
+        new{D,T,typeof(f),typeof(n̂),typeof(ρuf)}(
             f, f⁰, α, n̂, fᶠ, c̄,
             ρu, ρuf,
             dρ,

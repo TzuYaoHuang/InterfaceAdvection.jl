@@ -117,7 +117,7 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace,ρuf,λρ) wh
     for ii∈1:D sumAbsNhat+= abs(n̂[ICell,ii]) end
     if sumAbsNhat==0 || fullorempty(f[ICell])
         fᶠ[IFace] = f[ICell]*δl
-        ρuf[IFace,d,:] .+= fᶠ2ρuf(IFace,fᶠ,δl,λρ)
+        fᶠ2ρuf!(ρuf,IFace,d,fᶠ,δl,λρ)
         return nothing
     end
 
@@ -125,7 +125,7 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace,ρuf,λρ) wh
     a = ifelse(δl>0, α[ICell]-n̂[ICell,d]*(1-δl), α[ICell])
     n̂Cell = ntuple((ii)->n̂[ICell,ii]*ifelse(ii==d,abs(δl),1),D)
     fᶠ[IFace] = getVolumeFraction(n̂Cell, a)*δl
-    ρuf[IFace,d,:] .+= fᶠ2ρuf(IFace,fᶠ,δl,λρ)
+    fᶠ2ρuf!(ρuf,IFace,d,fᶠ,δl,λρ)
     return nothing
 end
 

@@ -186,6 +186,10 @@ end
 Convert volume flux `fᶠ` @ `I` to mash flux.
 """
 @inline @fastmath fᶠ2ρuf(I,fᶠ,δl,λρ) = (fᶠ[I], (δl-fᶠ[I])*λρ)
+@inline @fastmath function fᶠ2ρuf!(ρuf,I,d,fᶠ,δl,λρ)
+    ρuf[I,d,1] += fᶠ[I]
+    ρuf[I,d,2] += (δl-fᶠ[I])*λρ
+end
 
 @fastmath getρratio!(vec, fnew::AbstractArray{T,D}, fold, λρ) where {T,D} = for d∈1:D
     @loop (
