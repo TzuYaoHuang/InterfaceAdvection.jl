@@ -142,7 +142,7 @@ using EllipsisNotation
 Linearly interpolate density at either `I` or `I-0.5d`.
 """
 @inline @fastmath getρ(I::CartesianIndex{D},f::AbstractArray{T,D},λρ) where {T,D} = linInterpProp(f[I],λρ)
-@inline @fastmath getρ(Ii::CartesianIndex{Dv},f::AbstractArray{T,D},λρ) where {T,D,Dv} = getρ(Ii.I[end],Ii.I[1:D],f,λρ)
+@inline @fastmath getρ(Ii::CartesianIndex{Dv},f::AbstractArray{T,D},λρ) where {T,D,Dv} = getρ(Ii.I[end],CI(Ii.I[1:end-1]),f,λρ)
 @inline @fastmath getρ(d,I,f,λρ) = linInterpProp(ϕ(d,I,f),λρ)
 
 """

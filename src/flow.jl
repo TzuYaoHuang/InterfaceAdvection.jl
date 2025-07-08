@@ -20,36 +20,38 @@ end
 @inline limiter(u,c,d) = trueKoren(u,c,d)
 
 # u: advecting, f: advected
-@inline ϕu(j,i,I,u,f,ρuf,fOld,δt,λρ,λ=limiter) = (@inbounds ϕ(i,CI(I,j),ρuf)>0 ? 
-    ϕq(j,i,I,fOld,ρuf,u,f[I-2δ(a,I)],f[I-δ(a,I)],f[I],δt,λρ,λ) : 
-    ϕq(j,i,I,fOld,ρuf,u,f[I+δ(a,I)],f[I],f[I-δ(a,I)],δt,λρ,λ)
+@inline ϕu(j,i,I,Ψ,u,f,ρuf,fOld,δt,λρ,λ=limiter) = (@inbounds Ψ>0 ? 
+    ϕq(j,i,I,fOld,ρuf,u,f[I-2δ(j,I)],f[I-δ(j,I)],f[I],δt,λρ,λ) : 
+    ϕq(j,i,I,fOld,ρuf,u,f[I+δ(j,I)],f[I],f[I-δ(j,I)],δt,λρ,λ)
 )
-@inline ϕuP(j,i,Ip,I,u,f,ρuf,fOld,δt,λρ,λ=limiter) = (@inbounds ϕ(i,CI(I,j),ρuf)>0 ? 
-    ϕq(j,i,I,fOld,ρuf,u,f[Ip],f[I-δ(a,I)],f[I],δt,λρ,λ) : 
-    ϕq(j,i,I,fOld,ρuf,u,f[I+δ(a,I)],f[I],f[I-δ(a,I)],δt,λρ,λ)
+@inline ϕuP(j,i,Ip,I,Ψ,u,f,ρuf,fOld,δt,λρ,λ=limiter) = (@inbounds Ψ>0 ? 
+    ϕq(j,i,I,fOld,ρuf,u,f[Ip],f[I-δ(j,I)],f[I],δt,λρ,λ) : 
+    ϕq(j,i,I,fOld,ρuf,u,f[I+δ(j,I)],f[I],f[I-δ(j,I)],δt,λρ,λ)
 )
-@inline ϕuL(j,i,I,u,f,ρuf,fOld,δt,λρ,λ=limiter) = (@inbounds ϕ(i,CI(I,j),ρuf)>0 ? 
-    ϕq(j,i,I,fOld,ρuf,u,2f[I-δ(a,I)]-f[I],f[I-δ(a,I)],f[I],δt,λρ,λ) : 
-    ϕq(j,i,I,fOld,ρuf,u,f[I+δ(a,I)],f[I],f[I-δ(a,I)],δt,λρ,λ)
+@inline ϕuL(j,i,I,Ψ,u,f,ρuf,fOld,δt,λρ,λ=limiter) = (@inbounds Ψ>0 ? 
+    ϕq(j,i,I,fOld,ρuf,u,2f[I-δ(j,I)]-f[I],f[I-δ(j,I)],f[I],δt,λρ,λ) : 
+    ϕq(j,i,I,fOld,ρuf,u,f[I+δ(j,I)],f[I],f[I-δ(j,I)],δt,λρ,λ)
 )
-@inline ϕuR(j,i,I,u,f,ρuf,fOld,δt,λρ,λ=limiter) = (@inbounds ϕ(i,CI(I,j),ρuf)<0 ? 
-    ϕq(j,i,I,fOld,ρuf,u,2f[I]-f[I-δ(a,I)],f[I],f[I-δ(a,I)],δt,λρ,λ) : 
-    ϕq(j,i,I,fOld,ρuf,u,f[I-2δ(a,I)],f[I-δ(a,I)],f[I],δt,λρ,λ)
+@inline ϕuR(j,i,I,Ψ,u,f,ρuf,fOld,δt,λρ,λ=limiter) = (@inbounds Ψ<0 ? 
+    ϕq(j,i,I,fOld,ρuf,u,2f[I]-f[I-δ(j,I)],f[I],f[I-δ(j,I)],δt,λρ,λ) : 
+    ϕq(j,i,I,fOld,ρuf,u,f[I-2δ(j,I)],f[I-δ(j,I)],f[I],δt,λρ,λ)
 )
 
-function ϕq(j,i,I,fOld::AbstractArray{T,D},ρuf,u,uu,cc,dd,δt,λρ,λ) where {T,D}
+function ϕq(j,i,Ii,fOld::AbstractArray{T,D},ρuf,u,uu,cc,dd,δt,λρ,λ) where {T,D}
     # I the lower face of staggered cell I
+    I = CI(Ii.I[1:end-1])
     Ψ⁻, Ψ⁺ = ρuf[I-δ(i,I),j], ρuf[I,j]
     uδt⁻,uδt⁺ = u[I-δ(i,I),j]*δt, u[I,j]*δt
     Ψ = (Ψ⁻ + Ψ⁺)/2
     uδt = (uδt⁻*abs(Ψ⁻)+uδt⁺*abs(Ψ⁺))/max(abs(Ψ⁻)+abs(Ψ⁺),10eps(T))
 
-    ICell = ifelse(Ψ>0, I-δ(j,I), I)
+    ICell = ifelse(Ψ>0, Ii-δ(j,Ii), Ii)
 
-    vd = λ(uu,cc,dd)
     vI = cc
+    vd = λ(uu,cc,dd)
+    va = 2vI-vd
 
-    m2 = abs(Ψ)
+    m2 = abs(Ψ)*δt
     m1 = getρ(ICell,fOld,λρ) - m2
     l2 = abs(uδt)
     l1 = 1-l2
@@ -213,7 +215,7 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, dilaU, u, u⁰, c̄,
         # treatment for bottom boundary with BCs
         lowerBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,Val{tagper}())
         # inner cells
-        @loop (Φ[I] = ϕu(j,i,CI(I,i),u,uStar,ρuf,fOld,δt,λρ);
+        @loop (Φ[I] = ϕu(j,i,CI(I,i),ϕ(i,CI(I,j),ρuf),u,uStar,ρuf,fOld,δt,λρ);
                 r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
         @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
         # treatment for upper boundary with BCs
@@ -225,12 +227,12 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, dilaU, u, u⁰, c̄,
 end
 
 # Neumann BC Building block
-lowerBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{false}) = @loop r[I,i] += ϕuL(j,i,CI(I,i),u,uStar,ρuf,fOld,δt,λρ) over I ∈ slice(N,2,j,2)
-upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,i,CI(I,i),u,uStar,ρuf,fOld,δt,λρ) over I ∈ slice(N,N[j],j,2)
+lowerBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{false}) = @loop r[I,i] += ϕuL(j,i,CI(I,i),ϕ(i,CI(I,j),ρuf),u,uStar,ρuf,fOld,δt,λρ) over I ∈ slice(N,2,j,2)
+upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{false}) = @loop r[I-δ(j,I),i] += -ϕuR(j,i,CI(I,i),ϕ(i,CI(I,j),ρuf),u,uStar,ρuf,fOld,δt,λρ) over I ∈ slice(N,N[j],j,2)
 
 # Periodic BC Building block
 lowerBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{true}) = @loop (
-    Φ[I] = ϕuP(j,i,CIj(j,CI(I,i),N[j]-2),CI(I,i),u,uStar,ρuf,fOld,δt,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
+    Φ[I] = ϕuP(j,i,CIj(j,CI(I,i),N[j]-2),CI(I,i),ϕ(i,CI(I,j),ρuf),u,uStar,ρuf,fOld,δt,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
 upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
