@@ -25,13 +25,6 @@ else
     limiter(u,c,d)
 end
 
-
-limiterSmooth(u::T,c,d,dρ,β=clamp(dρ,0,1-eps(T)),s=sign(d-u),θ=T(0.5)) where T = if (c≤min(u,d) || c≥max(u,d)) 
-    c
-else
-    c + s*min(s*(limiter(u,c,d)-c), s*β/(1-β)*θ*(c-u)) # s*β/(1-β)*θ*(c-u)
-end
-
 @inline ϕu(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)],dρ[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I],dρ[I-δ(a,I)])
 @inline ϕuP(a,Ip,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)],dρ[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I],dρ[I-δ(a,I)])
 @inline ϕuL(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I],dρ[I-δ(a,I)])
