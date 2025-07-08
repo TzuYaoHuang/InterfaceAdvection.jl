@@ -19,12 +19,12 @@ end
 
 
 @inline limiter(u,c,d) = trueKoren(u,c,d)
-limiterSwitch(u::T,c,d,dρ,dρd,γ=0.51, γd=-Inf) where T = if 1-10eps(T)<dρ
-    ifelse(dρd > γd, limiter(u,c,d), TVDdown(u,c,d))
-elseif γ ≤ dρ < 1
-    ifelse(dρd > γd, limiter(u,c,d), TVDcen(u,c,d))
+limiterSwitch(u::T,c,d,dρ,γ=0.9, γd=-Inf) where T = if dρ < γ
+    upwind(u,c,d)
+elseif dρ+10eps(T) < 1
+    limiter(u,c,d)
 else
-    ifelse(dρd > γd, upwind(u,c,d), TVDcen(u,c,d))
+    limiter(u,c,d)
 end
 
 
@@ -34,10 +34,10 @@ else
     c + s*min(s*(limiter(u,c,d)-c), s*β/(1-β)*θ*(c-u)) # s*β/(1-β)*θ*(c-u)
 end
 
-@inline ϕu(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)],dρ[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I],dρ[I-δ(a,I)])
-@inline ϕuP(a,Ip,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)],dρ[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I],dρ[I-δ(a,I)])
-@inline ϕuL(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I],dρ[I-δ(a,I)])
-@inline ϕuR(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)],dρ[I])
+@inline ϕu(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I])
+@inline ϕuP(a,Ip,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I])
+@inline ϕuL(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u>0 ? u*ϕ(a,I,f) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)],dρ[I])
+@inline ϕuR(a,I,f,u,dρ,λ=limiterSwitch) = @inbounds u<0 ? u*ϕ(a,I,f) : u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I],dρ[I-δ(a,I)])
 
 
 @fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
