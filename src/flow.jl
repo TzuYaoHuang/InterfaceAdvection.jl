@@ -40,30 +40,20 @@ end
 function ϕq(j,i,Ii,fOld::AbstractArray{T,D},ρuf,u,uu,cc,dd,δt,λρ,λ) where {T,D}
     # I the lower face of staggered cell I
     I = CI(Ii.I[1:end-1])
-    Ψ⁻, Ψ⁺ = ρuf[I-δ(i,I),j], ρuf[I,j]
-    uδt⁻,uδt⁺ = u[I-δ(i,I),j]*δt, u[I,j]*δt
-    Ψ = (Ψ⁻ + Ψ⁺)/2
-    uδt = (uδt⁻*abs(Ψ⁻)+uδt⁺*abs(Ψ⁺))/max(abs(Ψ⁻)+abs(Ψ⁺),10eps(T))
+    Ψ = ϕ(i,CI(I,j),ρuf)
 
-    ICell = ifelse(Ψ>0, Ii-δ(j,Ii), Ii)
+    ICell = ifelse(Ψ>0, I-δ(j,I), I)
 
     vI = cc
     vd = λ(uu,cc,dd)
     va = 2vI-vd
 
-    m2 = abs(Ψ)*δt
-    m1 = getρ(ICell,fOld,λρ) - m2
-    l2 = abs(uδt)
+    mOut = abs(Ψ)*δt
+    mOld = getρ(ICell,fOld,λρ)
+    l2 = abs(mOut)/mOld
     l1 = 1-l2
 
-    c = (m1*l1/2+m2*(1+l1)/2)/(m1+m2)
-    vc = va*(1-c)+vd*c
-
-    s = sign(vd-va)
-    slope = s*min(s*(vd-vc)/(1-c), s*(vc-va)/c)
-
-    vb = vI + slope*(l1-c)
-    vd = vI + slope*( 1-c)
+    vb = l2*va + l1*vd
     return Ψ*(vb+vd)/2
 end
 
@@ -197,7 +187,7 @@ function advectVOFρuu!(
         advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
 
         # advect uᵢ in d direction
-        fᶠ .= Φ # fold
+        f2face1D!(fᶠ,Φ,d; perdir) # fold
         uStar .= r
         ρuf ./= δt; BC!(ρuf,uBC,exitBC,perdir)
         advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fᶠ, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
