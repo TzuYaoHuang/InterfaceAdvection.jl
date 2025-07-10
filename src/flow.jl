@@ -195,12 +195,12 @@ function advectVOFρuu!(
     end
 end
 
-function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, dilaU, u, u⁰, c̄, λρ, d, δt; perdir=())
+function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, ρ̄∂ⱼuⱼ, u, u⁰, c̄, λρ, d, δt; perdir=())
     N,D = size_u(u)
     r .= 0
     j = d
-    @loop dilaU[I] = (∂(d,I,u)+∂(d,I,u⁰))/2 over I∈inside(Φ)
-    BCf!(dilaU;perdir)
+    @loop ρ̄∂ⱼuⱼ[I] = getρ(I,c̄,λρ)*(∂(d,I,u)+∂(d,I,u⁰))/2 over I∈inside(Φ)
+    BCf!(ρ̄∂ⱼuⱼ;perdir)
     for i∈1:D
         tagper = (j∈perdir)
         # treatment for bottom boundary with BCs
@@ -212,7 +212,7 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, dilaU, u, u⁰, c̄,
         # treatment for upper boundary with BCs
         upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,Val{tagper}())
 
-        @loop r[I,i] += u[I,i] * (getρ(I,c̄,λρ)*dilaU[I] + getρ(I-δ(i,I),c̄,λρ)*dilaU[I-δ(i,I)])/2 over I ∈ inside(Φ)
+        @loop r[I,i] += u[I,i] * ϕ(i,I,ρ̄∂ⱼuⱼ) over I ∈ inside(Φ)
     end
     @loop ρu[Ii] += r[Ii]*δt over Ii∈CartesianIndices(ρu)
 end
