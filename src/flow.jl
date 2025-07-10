@@ -47,6 +47,7 @@ function ϕq(j,i,Ii,fOld::AbstractArray{T,D},ρuf,u,uu,cc,dd,δt,λρ,λ) where 
     vI = cc
     vd = λ(uu,cc,dd)
     va = 2vI-vd
+    if fullorempty(fOld[ICell]) return Ψ*vd end
 
     mOut = abs(Ψ)*δt
     mOld = getρ(ICell,fOld,λρ)
@@ -211,7 +212,7 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, dilaU, u, u⁰, c̄,
         # treatment for upper boundary with BCs
         upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,Val{tagper}())
 
-        @loop r[I,i] += uOld[I,i] * (getρ(I,c̄,λρ)*dilaU[I] + getρ(I-δ(i,I),c̄,λρ)*dilaU[I-δ(i,I)])/2 over I ∈ inside(Φ)
+        @loop r[I,i] += u[I,i] * (getρ(I,c̄,λρ)*dilaU[I] + getρ(I-δ(i,I),c̄,λρ)*dilaU[I-δ(i,I)])/2 over I ∈ inside(Φ)
     end
     @loop ρu[Ii] += r[Ii]*δt over Ii∈CartesianIndices(ρu)
 end
