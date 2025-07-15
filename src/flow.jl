@@ -37,20 +37,21 @@ end
     ϕq(j,i,I,fOld,ρuf,u,f[I-2δ(j,I)],f[I-δ(j,I)],f[I],δt,λρ,λ)
 )
 
-function ϕq(j,i,Ii,fOld::AbstractArray{T,D},ρuf,u,uu,cc,dd,δt,λρ,λ) where {T,D}
+function ϕq(j,i,Ii,fOld::AbstractArray{T,Dv},ρuf,u,uu,cc,dd,δt,λρ,λ) where {T,Dv}
     # I the lower face of staggered cell I
     I = CI(Ii.I[1:end-1])
     Ψ = ϕ(i,CI(I,j),ρuf)
 
-    ICell = ifelse(Ψ>0, I-δ(j,I), I)
+    IiCell = ifelse(Ψ>0, Ii-δ(j,Ii), Ii)
 
     vI = cc
     vd = λ(uu,cc,dd)
     va = 2vI-vd
-    if fullorempty(fOld[ICell]) return Ψ*vd end
+    # if fullorempty(fOld[IiCell]) return Ψ*vd end
 
     mOut = abs(Ψ)*δt
-    mOld = getρ(ICell,fOld,λρ)
+    mOld = getρ(IiCell,fOld,λρ)
+    if mOut > mOld error("fuck") end
     l2 = abs(mOut)/mOld
     l1 = 1-l2
 
@@ -144,13 +145,13 @@ upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I)
 
 advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[end]) where {D} = advectVOFρuu!(
     f, c.fᶠ, c.α, c.n̂, u¹, u², dt, c.c̄,
-    c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.λρ, a.uBC;
+    c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.dρ, c.λρ, a.uBC;
     perdir=a.perdir, exitBC=a.exitBC
 )
 
 function advectVOFρuu!(
     f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,
-    ρu, r, Φ, ρuf, uStar, uOld, dilaU, λρ, uBC; 
+    ρu, r, Φ, ρuf, uStar, uOld, dilaU, dρ, λρ, uBC; 
     perdir=(),exitBC=false) where {T,D}
     tol = 10eps(T)
 
@@ -188,10 +189,10 @@ function advectVOFρuu!(
         advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
 
         # advect uᵢ in d direction
-        f2face1D!(fᶠ,Φ,d; perdir) # fold
+        f2face!(dρ, Φ; perdir) # fold
         uStar .= r
         ρuf ./= δt; BC!(ρuf,uBC,exitBC,perdir)
-        advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fᶠ, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
+        advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dρ, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
     end
 end
 
@@ -212,7 +213,7 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, ρ̄∂ⱼuⱼ, u, u
         # treatment for upper boundary with BCs
         upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,Val{tagper}())
 
-        @loop r[I,i] += u[I,i] * ϕ(i,I,ρ̄∂ⱼuⱼ) over I ∈ inside(Φ)
+        @loop r[I,i] += uOld[I,i] * ϕ(i,I,ρ̄∂ⱼuⱼ) over I ∈ inside(Φ)
     end
     @loop ρu[Ii] += r[Ii]*δt over Ii∈CartesianIndices(ρu)
 end

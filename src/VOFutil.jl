@@ -214,3 +214,10 @@ function f2face1D!(fFace::AbstractArray{T,D}, fCen, d; perdir=()) where {T,D}
     @loop fFace[I] = ϕ(d,I,fCen) over I∈inside(fCen)
     BCv1D!(fFace,d;perdir)
 end
+
+function f2face!(fFace, fCen::AbstractArray{T,D}; perdir=()) where {T,D}
+    for d∈1:D
+        @loop fFace[I,d] = ϕ(d,I,fCen) over I∈inside_uWB(size(fCen),d)
+    end
+    BCv!(fFace;perdir)
+end
