@@ -65,6 +65,8 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         ηc = ifelse(η==0,nothing,η)
         μc = ifelse(μ==0,nothing,μ)
 
+        println("μ: $(μc), λρ: $(λρ)")
+
         new{D,T,typeof(f),typeof(n̂)}(
             f, f⁰, α, n̂, fᶠ, c̄,
             ρu, ρuf,

@@ -1,7 +1,6 @@
-import WaterLily: accelerate!, median, update!, project!, BCTuple, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞
+import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ
 import LinearAlgebra: ⋅
 
-@inline ϕ(a,I,f) = @inbounds (f[I]+f[I-δ(a,I)])/2
 # I need to re-define the flux limiter or else the TVD property cannot conserve
 @fastmath upwind(u,c,d) = c
 @fastmath cen(u,c,d) = (c+d)/2
@@ -12,8 +11,13 @@ import LinearAlgebra: ⋅
     α,β = c-u,d-c
     return c+max(α*β,0)*ifelse(α==β && α==0, 0, (α+β)/(α^2+β^2))/2
 end
+@fastmath Sweby(u,c,d,γ=1.5,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*max(0, min(s*γ*(c-u),s*(d-c)), min(s*(c-u),s*γ*(d-c)))/2
+@inline superbee(u,c,d) = Sweby(u,c,d,2)
+@fastmath TVDcen(u,c,d,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*min(s*(c-u),s*(d-c)/2)
+@fastmath TVDdown(u,c,d,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*min(s*(c-u),s*(d-c))
 
-limiter(u,c,d) = trueKoren(u,c,d)
+
+@inline limiter(u,c,d) = trueKoren(u,c,d)
 
 @inline ϕu(a,I,f,u,λ=limiter) = @inbounds u>0 ? u*λ(f[I-2δ(a,I)],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
 @inline ϕuP(a,Ip,I,f,u,λ=limiter) = @inbounds u>0 ? u*λ(f[Ip],f[I-δ(a,I)],f[I]) : u*λ(f[I+δ(a,I)],f[I],f[I-δ(a,I)])
@@ -23,43 +27,39 @@ limiter(u,c,d) = trueKoren(u,c,d)
 
 @fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
     a.u⁰ .= a.u; c.f⁰ .= c.f
-    # TODO: check if BC doable for ρu
+    t₁ = sum(a.Δt); t₀ = t₁-δt; tₘ = t₁-δt/2
 
     # predictor u(n) → u(n+1/2∘) with u(n)
     @log "p"
     dtCoeff = T(1/2)
-    U = BCTuple(a.U,@view(a.Δt[1:end-1]),D)
+
     advect!(a,c,c.f⁰,a.u⁰,a.u)
-    # TODO: include measure
     a.μ₀ .= 1
     @. c.f⁰ = (c.f⁰+c.f)/2
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     c.ρu .= a.u⁰
-    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,@view(a.Δt[1:end-1]),a.g,a.U,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,tₘ,a.g,a.uBC,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
-    myproject!(a,b,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
+    myproject!(a,b,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
 
     # c.f .= c.f⁰
     # a.u .= a.u⁰
 
     # corrector u(n) → u(n+1) with u(n+1/2∘)
     @log "c"
-    U = BCTuple(a.U,a.Δt,D)
     # recover ρu @ t = n since it is modified for the predictor step
     advect!(a,c,c.f,a.u,a.u)
-    # TODO: include measure
-    a.μ₀ .= 1
-    # TODO: viscous term and surface tension term should be evaluated 
+    a.μ₀ .= 1 
     # at the end of time step to avoid divide by wrong ρ
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
     c.ρu .= a.u⁰
-    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,a.Δt,a.g,a.U); BC!(a.u,U,a.exitBC,a.perdir)
+    updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
-    myproject!(a,b); BC!(a.u,U,a.exitBC,a.perdir)
+    myproject!(a,b); BC!(a.u,a.uBC,a.exitBC,a.perdir)
 
-    push!(a.Δt,min(MPCFL(a,c),1.2a.Δt[end]))
+    push!(a.Δt,min(MPCFL(a,c),1.2δt))
 end
 
 # Forcing with the unit of ρu instead of u
@@ -100,8 +100,8 @@ lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
 upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
-function updateU!(u,ρu,forcing,dt,f,λρ,ΔtList,g,U,w=1)
-    accelerate!(forcing,ΔtList,g,U)
+function updateU!(u,ρu,forcing,dt,f,λρ,tNow,g,uBC,w=1)
+    accelerate!(forcing,tNow,g,uBC)
     @loop u[Ii] = ρu[Ii] + forcing[Ii]*dt*w over Ii∈CartesianIndices(u)
 end
 
@@ -123,7 +123,7 @@ end
 
     @inside a.σ[I] = maxTotalFlux(I,a.u)
     Δt_cVOF = 1/2maximum(a.σ)
-    Δt_Grav = isnothing(a.g) ? Δt_max : 1/(2*√sum(i->a.g(i,timeNow)^2, 1:D))
+    Δt_Grav = isnothing(a.g) ? Δt_max : 1/(2*√sum(i->a.g(i,zeros(SVector{D,T}),timeNow)^2, 1:D))
     Δt_Visc = isnothing(c.μ) ? Δt_max : 3/(14*c.μ*max(1,c.λμ/c.λρ))
     Δt_SurfT = isnothing(c.η) ? Δt_max : sqrt((1+c.λρ)/(8π*c.η))  # 8 from kelli's code
 
