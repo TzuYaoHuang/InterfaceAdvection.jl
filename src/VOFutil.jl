@@ -171,3 +171,33 @@ end
 Convert volume flux `fᶠ` @ `I` to mash flux.
 """
 @inline @fastmath fᶠ2ρuf(I,fᶠ,δl,λρ) = δl*λρ + (1-λρ)*fᶠ[I]
+
+
+"""
+    smoothVOF!(sf, f, rf; itm, perdir)
+
+Smooth the cell-centered VOF field with moving average technique.
+
+    `sf`: after smooth
+    `f`: befor smooth
+    `rf`: buffer
+    `itm`: smooth steps
+"""
+function smoothVOF!(sf::AbstractArray{T,d}, f::AbstractArray{T,d}, rf::AbstractArray{T,d}; itm=2, perdir=()) where {T,d}
+    (itm!=0)&&(rf .= f)
+    for it ∈ 1:itm
+        sf .= 0
+        @loop sumAvg!(sf,rf,I) over I ∈ inside(rf)
+        BCf!(sf;perdir)
+        rf .= sf
+    end
+    (itm==0)&&(sf .= f)
+end
+
+function sumAvg!(sf::AbstractArray{T,d},rf::AbstractArray{T,d},I) where {T,d}
+    α,β,γ = 1,1,2
+    for j∈1:d
+        sf[I] += α*rf[I+δ(j, I)] + β*rf[I-δ(j, I)] + γ*rf[I]
+    end
+    sf[I] /= (α+β+γ)*d
+end

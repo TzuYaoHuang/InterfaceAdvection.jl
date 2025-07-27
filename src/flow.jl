@@ -29,6 +29,8 @@ end
     a.u⁰ .= a.u; c.f⁰ .= c.f
     t₁ = sum(a.Δt); t₀ = t₁-δt; tₘ = t₁-δt/2
 
+    itm = 2
+
     # predictor u(n) → u(n+1/2∘) with u(n)
     @log "p"
     dtCoeff = T(1/2)
@@ -39,6 +41,7 @@ end
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     c.ρu .= a.u⁰
     updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,tₘ,a.g,a.uBC,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
+    smoothVOF!(c.fᶠ, c.f⁰, c.α;perdir=c.perdir, itm)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
@@ -55,6 +58,7 @@ end
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
     c.ρu .= a.u⁰
     updateU!(a.u,c.ρu,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC); BC!(a.u,a.uBC,a.exitBC,a.perdir)
+    smoothVOF!(c.fᶠ, c.f, c.α;perdir=c.perdir, itm)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
     myproject!(a,b); BC!(a.u,a.uBC,a.exitBC,a.perdir)
