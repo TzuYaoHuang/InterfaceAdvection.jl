@@ -195,7 +195,7 @@ function smoothVOF!(sf::AbstractArray{T,d}, f::AbstractArray{T,d}, rf::AbstractA
 end
 
 function sumAvg!(sf::AbstractArray{T,d},rf::AbstractArray{T,d},I) where {T,d}
-    α,β,γ = 1,1,2
+    α,β,γ = 1,1,1/d
     for j∈1:d
         sf[I] += α*rf[I+δ(j, I)] + β*rf[I-δ(j, I)] + γ*rf[I]
     end
