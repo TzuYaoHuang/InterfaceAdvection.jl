@@ -51,7 +51,7 @@ function ϕq(j,i,Ii,fOld::AbstractArray{T,Dv},ρuf,u,uu,cc,dd,δt,λρ,λ) where
 
     mOut = abs(Ψ)*δt
     mOld = getρ(IiCell,fOld,λρ)
-    if mOut > mOld error("fuck") end
+    if mOut > mOld return Ψ*vI end
     l2 = abs(mOut)/mOld
     l1 = 1-l2
 
