@@ -28,13 +28,13 @@ end
     # predictor u(n) → u(n+1/2∘) with u(n)
     @log "p"
     dtCoeff = T(1/2)
+    dt = δt*dtCoeff
     dtList = @view(a.Δt[1:end-1])
     U = BCTuple(a.uBC,dtList,D)
     u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,U,a.exitBC,a.perdir)
-    advect!(a,c,c.f⁰,a.u⁰,a.u); c.ρuf ./= δt; BC!(c.ρuf,U,a.exitBC,a.perdir)
+    advect!(a,c,c.f⁰,a.u⁰,a.u,dt); c.ρuf ./= dt; BC!(c.ρuf,U,a.exitBC,a.perdir)
     # TODO: include measure
     a.μ₀ .= 1
-    @. c.f⁰ = (c.f⁰+c.f)/2
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     updateU!(a.u,c.ρu,a.f,δt,c.f⁰,c.λρ,dtList,a.g,a.uBC,dtCoeff); BC!(a.u,U,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
