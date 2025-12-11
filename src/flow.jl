@@ -146,19 +146,22 @@ upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I)
 advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[end]) where {D} = advectVOFρuu!(
     f, c.fᶠ, c.α, c.n̂, u¹, u², dt, c.c̄,
     c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.dρ, c.λρ, a.uBC;
-    perdir=a.perdir, exitBC=a.exitBC
+    perdir=a.perdir, exitBC=a.exitBC,
+    # dirO=1:D
+    # dirO=shuffle(1:D)
+    dirO=ntuple(i->mod(length(a.Δt)+i,D)+1, D)
 )
 
 function advectVOFρuu!(
     f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,
     ρu, r, Φ, ρuf, uStar, uOld, dilaU, dρ, λρ, uBC; 
-    perdir=(),exitBC=false) where {T,D}
+    perdir=(),exitBC=false, dirO=shuffle(1:D)) where {T,D}
     tol = 10eps(T)
 
     # get for dilation term
     @loop c̄[I] = ifelse(f[I]<0.5,0,1) over I ∈ CartesianIndices(f)
 
-    dirOrder = shuffle(1:D)
+    dirOrder = isnothing(dirO) ? shuffle(1:D) : dirO
 
     # Operator splitting to avoid bias
     # Reference for splitting method: http://www.othmar-koch.org/splitting/index.php

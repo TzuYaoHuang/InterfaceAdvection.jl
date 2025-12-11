@@ -10,7 +10,11 @@ It calculates the volume fraction after one full time step.
 Volume fraction field `f` is being fluxed with the averaged of two velocity -- `u¹` and `u²`.
 """
 advect!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, dt=a.Δt[end]) where {D} = advectVOF!(
-    f,c.fᶠ,c.α,c.n̂,u¹,u²,dt,c.c̄,c.ρuf,c.λρ; perdir=a.perdir
+    f,c.fᶠ,c.α,c.n̂,u¹,u²,dt,c.c̄,c.ρuf,c.λρ; 
+    perdir=a.perdir, 
+    # dirO=1:D
+    # dirO=shuffle(1:D)
+    dirO=ntuple(i->mod(length(a.Δt)+i,D)+1, D)
 )
 
 """
@@ -21,7 +25,7 @@ This is the expanded function for `advect!`.
 `c̄` is used to take care (de-)activation of dilation term.
 `ρuf` stores the mass flux for mass-momentum consistent method.
 """
-function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; perdir=()) where {T,D}
+function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; perdir=(), dirO=shuffle(1:D)) where {T,D}
     tol = 10eps(T)
 
     ρuf .= 0
@@ -29,7 +33,7 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; 
     # get for dilation term
     @loop c̄[I] = ifelse(f[I]<0.5,0,1) over I ∈ CartesianIndices(f)
 
-    dirOrder = shuffle(1:D)
+    dirOrder = isnothing(dirO) ? shuffle(1:D) : dirO
 
     # Operator splitting to avoid bias
     # Reference for splitting method: http://www.othmar-koch.org/splitting/index.php
