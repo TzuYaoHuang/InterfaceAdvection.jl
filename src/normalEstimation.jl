@@ -122,8 +122,8 @@ function getInterfaceNormal_CCi(f::AbstractArray{T,n},nCD,I,dc) where {T,n}
         if (d == dc)
             nhat[d] = copysign(1.0,nCD[d])
         else
-            hu = get3CellHeight(I+δ(d,I), f, dc)
-            hd = get3CellHeight(I-δ(d,I), f, dc)
+            hu = get3CellHeight(f, I+δ(d,I), dc)
+            hd = get3CellHeight(f, I-δ(d,I), dc)
             nhat[d] = -(hu-hd)*0.5
         end
     end
