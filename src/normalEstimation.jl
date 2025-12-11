@@ -85,3 +85,99 @@ function getInterfaceNormal_SLIC!(f::AbstractArray{T,D},n̂,I) where {T,D}
     d = myArgAbsMax(n̂,I)
     for i∈1:D n̂[I,i] = ifelse(i==d,sign(n̂[I,i]),T(0)) end
 end
+
+"""
+    getInterfaceNormal_MYC!(f,nhat,I)
+
+Mixed Youngs-Centered normal reconstructure scheme from [Aulisa et al. (2007)](https://doi.org/10.1016/j.jcp.2007.03.015), but I think best explained by 
+[Duz (2005) page 81](https://doi.org/10.4233/uuid:e204277d-c334-49a2-8b2a-8a05cf603086) and [Baraldi et al. (2014)](http://doi.org/10.1016/j.compfluid.2013.12.018).
+One can also be referred to the source code of [PARIS](http://www.ida.upmc.fr/~zaleski/paris/). It is in vofnonmodule.f90.
+"""
+function getInterfaceNormal_MYC!(f::AbstractArray{T,n},n̂,I) where {T,n}
+    nhat = @views n̂[I,:]
+    getInterfaceNormal_Y!(f,nhat,I)
+    CCNhat = zeros(T,n)
+    curNhat = zeros(T,n)
+    curm0 = 0
+    CCiz = 0
+    for iz∈1:n
+        curNhat .= getInterfaceNormal_CCi(f,nhat,I,iz)
+        if abs(curNhat[iz])>curm0 CCNhat .= curNhat; CCiz = iz end
+        curm0 = abs(curNhat[iz])
+    end
+    if abs(CCNhat[CCiz]) < maximum(abs,nhat)
+        nhat .= CCNhat
+    end
+end
+
+"""
+    getInterfaceNormal_CCi!(f,nCD,I,dc)
+
+Normal reconstructure scheme from Center column method but only in `dc` direction.
+Assume we have already calculated a guessed normal to set the direction (sign) of interface in `nCD`. 
+"""
+function getInterfaceNormal_CCi(f::AbstractArray{T,n},nCD,I,dc) where {T,n}
+    nhat = zeros(T,n)
+    for d ∈ 1:n
+        if (d == dc)
+            nhat[d] = copysign(1.0,nCD[d])
+        else
+            hu = get3CellHeight(I+δ(d,I), f, dc)
+            hd = get3CellHeight(I-δ(d,I), f, dc)
+            nhat[d] = -(hu-hd)*0.5
+        end
+    end
+    return nhat./sum(abs,nhat)
+end
+
+"""
+    getInterfaceNormal_Y!(f, nhat, I)
+
+Calculate the interface normal from [Youngs (1982)](https://www.researchgate.net/publication/249970655_Time-Dependent_Multi-material_Flow_with_Large_Fluid_Distortion).
+Note that `nhat` is view of `n̂[I,:]`.
+"""
+function getInterfaceNormal_Y!(f::AbstractArray{T,D},nhat,I) where {T,D}
+    for d ∈ 1:D
+        nhat[d] = (YoungSum(f,I-δ(d,I),d) - YoungSum(f,I+δ(d,I),d))*0.5
+    end
+    nhat ./= sum(abs,nhat)
+end
+function YoungSum(f,I,d)
+    δxy = oneunit(I)-δ(d,I)
+    a = 0
+    for II∈I-δxy:I
+        for III∈II:II+δxy
+            a+=f[III]
+        end
+    end
+    return a
+end
+
+
+"""
+    getInterfaceNormal_CD!(f, nhat, I)
+
+Calculate the interface normal from the central difference scheme with the closest neighbor considered (4 neighbor in 3D).
+Note that `nhat` is view of `n̂[I,:]`.
+"""
+function getInterfaceNormal_CD!(f::AbstractArray{T,n},n̂,I) where {T,n}
+    for d ∈ 1:n
+        n̂[I,d] = (crossSummation(f,I-δ(d,I),d)-crossSummation(f,I+δ(d,I),d))*0.5
+    end
+end
+function crossSummation(f::AbstractArray{T,n},I,d,γ=1.0) where {T,n}
+    a = f[I]
+    # for iDir∈getAnotherDir(d,n)
+    #     a += f[I-δ(iDir,I)]+f[I+δ(iDir,I)]
+    # end
+    for iDir∈1:n
+        a += iDir≠d ? γ*(f[I-δ(iDir,I)]+f[I+δ(iDir,I)]) : 0
+    end
+    return a
+end
+
+function getInterfaceNormal_XYLIC!(f::AbstractArray{T,n},n̂,I,d=2) where {T,n}
+    for i∈1:n
+        n̂[I,i] = ifelse(i==d,1,0)
+    end
+end
