@@ -221,3 +221,14 @@ function f2face!(fFace, fCen::AbstractArray{T,D}; perdir=()) where {T,D}
     end
     BCv!(fFace;perdir)
 end
+
+"""
+    getInterfaceCenter(n̂,α,I)
+
+To calculate the quasi-center of line or plane segments in cell `I` by projecting the cell center to the plane.
+"""
+function getInterfaceCenter(n̂::AbstractArray{T,nv},α::AbstractArray{T,n},I::CartesianIndex{n}) where{T,n,nv}
+    nLocal = @views n̂[I,:]
+    dis = (0.5sum(nLocal) - α[I])/√sum(abs2,nLocal)
+    return -dis*nLocal/√sum(abs2,nLocal)
+end
