@@ -18,7 +18,8 @@ function reconstructInterface!(f::AbstractArray{T,D},α,n̂,I) where {T,D}
     end
 
     # get normal
-    getInterfaceNormal_WY!(f,n̂,I)
+    # getInterfaceNormal_WY!(f,n̂,I)
+    getInterfaceNormal_MYC!(f,n̂,I)
 
     # get intercept
     α[I] = getIntercept(n̂,I,f[I])
