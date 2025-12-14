@@ -96,9 +96,9 @@ One can also be referred to the source code of [PARIS](http://www.ida.upmc.fr/~z
 """
 function getInterfaceNormal_MYC!(f::AbstractArray{T,n},n̂,I) where {T,n}
     nhat = @views n̂[I,:]
-    getInterfaceNormal_Y!(f,nhat,I)
-    CCNhat = zeros(T,n)
-    curNhat = zeros(T,n)
+    getInterfaceNormal_Y!(f,n̂,I)
+    CCNhat = @MVector zeros(T,n)
+    curNhat = @MVector zeros(T,n)
     curm0 = 0
     CCiz = 0
     for iz∈1:n
@@ -118,7 +118,7 @@ Normal reconstructure scheme from Center column method but only in `dc` directio
 Assume we have already calculated a guessed normal to set the direction (sign) of interface in `nCD`. 
 """
 function getInterfaceNormal_CCi(f::AbstractArray{T,n},nCD,I,dc) where {T,n}
-    nhat = zeros(T,n)
+    nhat = @MVector zeros(T,n)
     for d ∈ 1:n
         if (d == dc)
             nhat[d] = copysign(1.0,nCD[d])
@@ -128,7 +128,8 @@ function getInterfaceNormal_CCi(f::AbstractArray{T,n},nCD,I,dc) where {T,n}
             nhat[d] = -(hu-hd)*0.5
         end
     end
-    return nhat./sum(abs,nhat)
+    nhat ./= sum(abs,nhat)
+    return nhat
 end
 
 """
@@ -137,11 +138,15 @@ end
 Calculate the interface normal from [Youngs (1982)](https://www.researchgate.net/publication/249970655_Time-Dependent_Multi-material_Flow_with_Large_Fluid_Distortion).
 Note that `nhat` is view of `n̂[I,:]`.
 """
-function getInterfaceNormal_Y!(f::AbstractArray{T,D},nhat,I) where {T,D}
+function getInterfaceNormal_Y!(f::AbstractArray{T,D},n̂,I) where {T,D}
+    a = 0
     for d ∈ 1:D
-        nhat[d] = (YoungSum(f,I-δ(d,I),d) - YoungSum(f,I+δ(d,I),d))*0.5
+        n̂[I,d] = (YoungSum(f,I-δ(d,I),d) - YoungSum(f,I+δ(d,I),d))*0.5
+        a += abs(n̂[I,d])
     end
-    nhat ./= sum(abs,nhat)
+    for d ∈ 1:D
+        n̂[I,d] /= a
+    end
 end
 function YoungSum(f,I,d)
     δxy = oneunit(I)-δ(d,I)
