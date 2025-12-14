@@ -95,19 +95,21 @@ Mixed Youngs-Centered normal reconstructure scheme from [Aulisa et al. (2007)](h
 One can also be referred to the source code of [PARIS](http://www.ida.upmc.fr/~zaleski/paris/). It is in vofnonmodule.f90.
 """
 function getInterfaceNormal_MYC!(f::AbstractArray{T,n},n̂,I) where {T,n}
-    nhat = @views n̂[I,:]
     getInterfaceNormal_Y!(f,n̂,I)
-    CCNhat = @MVector zeros(T,n)
-    curNhat = @MVector zeros(T,n)
+    maxNhat = T(0)
+    for i∈1:n maxNhat = ifelse(abs(n̂[I,i])>maxNhat, abs(n̂[I,i]), maxNhat) end
+
     curm0 = 0
     CCiz = 0
     for iz∈1:n
-        curNhat .= getInterfaceNormal_CCi(f,nhat,I,iz)
-        if abs(curNhat[iz])>curm0 CCNhat .= curNhat; CCiz = iz end
+        curNhat = getInterfaceNormal_CCi(f,n̂,I,iz)
+        if abs(curNhat[iz])>curm0 CCiz = iz end
         curm0 = abs(curNhat[iz])
     end
-    if abs(CCNhat[CCiz]) < maximum(abs,nhat)
-        nhat .= CCNhat
+    CCNhat = getInterfaceNormal_CCi(f,n̂,I,CCiz)
+    
+    if abs(CCNhat[CCiz]) < maxNhat
+        for i∈1:n n̂[I,i] = CCNhat[i] end
     end
 end
 
@@ -117,19 +119,19 @@ end
 Normal reconstructure scheme from Center column method but only in `dc` direction.
 Assume we have already calculated a guessed normal to set the direction (sign) of interface in `nCD`. 
 """
-function getInterfaceNormal_CCi(f::AbstractArray{T,n},nCD,I,dc) where {T,n}
-    nhat = @MVector zeros(T,n)
-    for d ∈ 1:n
-        if (d == dc)
-            nhat[d] = copysign(1.0,nCD[d])
+function getInterfaceNormal_CCi(f::AbstractArray{T,n},n̂,I,dc) where {T,n}
+    nhat = ntuple(
+        d -> if (d == dc)
+            sign(n̂[I,d])
         else
             hu = get3CellHeight(f, I+δ(d,I), dc)
             hd = get3CellHeight(f, I-δ(d,I), dc)
-            nhat[d] = -(hu-hd)*0.5
-        end
-    end
-    nhat ./= sum(abs,nhat)
-    return nhat
+            -(hu-hd)/2
+        end,
+        n
+    )
+    nhatN = nhat./sum(abs,nhat)
+    return nhatN
 end
 
 """
