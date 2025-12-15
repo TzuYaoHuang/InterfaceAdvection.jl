@@ -14,15 +14,22 @@ end
 @inline function applyVOF!(f::AbstractArray{T,D},α::AbstractArray{T,D},n̂::AbstractArray{T,Dv},InterfaceSDF,I) where {T,D,Dv}
     # forwardDiff cause some problem so using finite difference
     Δd = T(0.01)
-    for i∈1:D
-        xyzpδ = SVector{D,T}(loc(0,I) .+Δd .*δ(i,I).I)
-        xyzmδ = SVector{D,T}(loc(0,I) .-Δd .*δ(i,I).I)
-        n̂[I,i] = InterfaceSDF(xyzpδ) - InterfaceSDF(xyzmδ)
-    end
-    sumN2 = 0; for i∈1:D sumN2+= n̂[I,i]^2 end
+    xcen = loc(0,I)
 
-    # (n̂·𝐱 - α)/|n̂| = d
-    α[I] = - √sumN2*InterfaceSDF(loc(0,I).-T(0.5))
+    sumN = zero(T)
+    sumN2 = zero(T) 
+    for i∈1:D
+        xyzpδ = xcen .+Δd .*δ(i,I).I
+        xyzmδ = xcen .-Δd .*δ(i,I).I
+        Δd = InterfaceSDF(xyzpδ) - InterfaceSDF(xyzmδ)
+        n̂[I,i] = Δd
+        sumN += Δd
+        sumN2 += Δd^2
+    end
+
+    # (n̂·(𝐱_cen-𝐱_blCorner) - α) = |n̂| d_cen
+    # 𝐱_cen-𝐱_blCorner = (0.5,0.5,0.5)
+    α[I] = sumN/2 - √sumN2*InterfaceSDF(xcen)
 
     # the PLIC estimation
     f[I] = getVolumeFraction(n̂,I,α[I])
