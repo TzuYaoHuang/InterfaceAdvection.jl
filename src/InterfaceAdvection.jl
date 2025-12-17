@@ -10,7 +10,7 @@ include("VOFutil.jl")
 export applyVOF!, BCVOF!,containInterface,fullorempty
 
 include("normalEstimation.jl")
-export reconstructInterface!, getInterfaceNormal_WY!, getInterfaceNormal_PCD!
+export reconstructInterface!, getInterfaceNormal_WY!, getInterfaceNormal_PCD!, getInterfaceNormal_WH!, getInterfaceNormal_MYC!, getInterfaceNormal_Y!
 
 include("PLIC.jl")
 export getIntercept, getVolumeFraction

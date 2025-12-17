@@ -65,6 +65,46 @@ function getInterfaceNormal_WY!(f::AbstractArray{T,D},n̂,I) where {T,D}
     end
 end
 
+function getInterfaceNormal_WH!(f::AbstractArray{T,D},n̂,I) where {T,D}
+    # Initial guess on normal based on pure central difference
+    getInterfaceNormal_WY!(f,n̂,I)
+
+    # Get guessed dominant direction
+    dominantDir = majorDir(n̂,I)
+    absdoDir = abs(dominantDir)
+    
+    for d∈1:D
+        if d==abs(dominantDir)
+            n̂[I,d] = sign(n̂[I,d])
+            continue
+        end
+
+        n̂[I,d] /= abs(n̂[I,absdoDir])
+        slope = abs(n̂[I,d])
+
+        curDir = copysign(d, n̂[I,d])
+
+        # height of column from i-1, i, i+1
+        hl = get3CellHeight(f,I-δd(curDir,I),absdoDir)
+        hc = get3CellHeight(f,I             ,absdoDir)
+        hr = get3CellHeight(f,I+δd(curDir,I),absdoDir)
+        ∑h = hl+hc+hr
+
+        if 4.5slope ≤ ∑h ≤ 9-4.5slope
+            continue
+        end
+
+        if ∑h < 4.5slope
+            wb = get3CellHeight(f,I-δd(dominantDir,I), d)
+            n̂[I,d] = copysign((hl-0.5)/(wb-0.5),curDir)
+        end
+        if ∑h > 9 - 4.5slope
+            wt = get3CellHeight(f,I+δd(dominantDir,I), d)
+            n̂[I,d] = copysign((2.5-hr)/(2.5-wt),curDir) # what if hr > 2.5
+        end
+    end
+end
+
 """
     getInterfaceNormal_PCD!(f,n̂,I)
 
