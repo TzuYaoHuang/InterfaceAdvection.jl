@@ -13,14 +13,14 @@ function applyVOF!(f,α,n̂,InterfaceSDF)
 end
 @inline function applyVOF!(f::AbstractArray{T,D},α::AbstractArray{T,D},n̂::AbstractArray{T,Dv},InterfaceSDF,I) where {T,D,Dv}
     # forwardDiff cause some problem so using finite difference
-    Δd = T(0.01)
+    Δx = T(0.01)
     xcen = loc(0,I)
 
     sumN = zero(T)
     sumN2 = zero(T) 
     for i∈1:D
-        xyzpδ = xcen .+Δd .*δ(i,I).I
-        xyzmδ = xcen .-Δd .*δ(i,I).I
+        xyzpδ = SVector{D,T}([xcen[j]+ifelse(j==i,Δx,T(0)) for j∈1:D]) 
+        xyzmδ = SVector{D,T}([xcen[j]-ifelse(j==i,Δx,T(0)) for j∈1:D]) 
         Δd = InterfaceSDF(xyzpδ) - InterfaceSDF(xyzmδ)
         n̂[I,i] = Δd
         sumN += Δd
