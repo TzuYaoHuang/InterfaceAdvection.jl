@@ -18,8 +18,10 @@ function reconstructInterface!(f::AbstractArray{T,D},α,n̂,I) where {T,D}
     end
 
     # get normal
+    getInterfaceNormal_WH!(f,n̂,I)
     # getInterfaceNormal_WY!(f,n̂,I)
-    getInterfaceNormal_MYC!(f,n̂,I)
+    # getInterfaceNormal_MYC!(f,n̂,I)
+    # getInterfaceNormal_Column!(f,n̂,I)
 
     # get intercept
     α[I] = getIntercept(n̂,I,f[I])
@@ -65,21 +67,50 @@ function getInterfaceNormal_WY!(f::AbstractArray{T,D},n̂,I) where {T,D}
     end
 end
 
-function getInterfaceNormal_WH!(f::AbstractArray{T,D},n̂,I) where {T,D}
+"""
+    getInterfaceNormal_Column!(f,n̂,I)
+
+Normal reconstructure scheme just using pure centered column difference.
+"""
+function getInterfaceNormal_Column!(f::AbstractArray{T,D},n̂,I) where {T,D}
     # Initial guess on normal based on pure central difference
-    getInterfaceNormal_WY!(f,n̂,I)
+    getInterfaceNormal_PCD!(f,n̂,I)
 
     # Get guessed dominant direction
-    dominantDir = majorDir(n̂,I)
-    absdoDir = abs(dominantDir)
+    dominantDir = myArgAbsMax(n̂,I)
     
     for d∈1:D
-        if d==abs(dominantDir)
+        if d==dominantDir
             n̂[I,d] = sign(n̂[I,d])
             continue
         end
 
-        n̂[I,d] /= abs(n̂[I,absdoDir])
+        # height of column from i-1, i, i+1
+        hl = get3CellHeight(f,I-δ(d,I),dominantDir)
+        hc = get3CellHeight(f,I       ,dominantDir)
+        hr = get3CellHeight(f,I+δ(d,I),dominantDir)
+
+        # general case
+        n̂[I,d] = (hl-hr)/2
+    end
+end
+
+function getInterfaceNormal_WH!(f::AbstractArray{T,D},n̂,I) where {T,D}
+    # Initial guess on normal based on pure central difference
+    getInterfaceNormal_Column!(f,n̂,I)
+
+    # Get guessed dominant direction
+    dominantDir = majorDir(n̂,I)
+    absdoDir = abs(dominantDir)
+    absn̂dom = abs(n̂[I,absdoDir])
+
+    for d ∈ 1:D n̂[I,d] /= absn̂dom end
+    
+    for d ∈ 1:D
+        if d==abs(dominantDir)
+            continue
+        end
+
         slope = abs(n̂[I,d])
 
         curDir = copysign(d, n̂[I,d])
