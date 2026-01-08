@@ -26,7 +26,7 @@ to subtract a background flow (by default, `U=0`).
 This function take multiphase into account so as the staggered arragement.
 """
 EnsI(I::CartesianIndex{3},ω) = 0.5*0.25fsum(3) do i
-    ix,iy = getAnotherDir(i,D)
+    ix,iy = getAnotherDir(i,3)
     ω[I,i]^2+ω[I+δ(ix,I),i]^2+ω[I+δ(iy,I),i]^2+ω[I+δ(ix,I)+δ(iy,I),i]^2
 end
 EnsI(I::CartesianIndex{2},ω) = 0.5*0.25*(
