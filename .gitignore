@@ -4,3 +4,5 @@ Manifest.toml
 *.png
 *.gif
 .DS_Store
+
+gr-temp/
