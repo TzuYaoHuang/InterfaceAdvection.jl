@@ -60,7 +60,7 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; 
         getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
         @loop f[I] += fᶠ[I]-fᶠ[I+δ(d,I)] + c̄[I]*(∂(d,I,u)+∂(d,I,u⁰))*δt/2 over I∈inside(f)
 
-        reportFillError(f,u,u⁰,δt,d,tol)
+        reportFillError(f,n̂,u,u⁰,δt,d,tol)
 
         cleanWisp!(f,tol)
         BCf!(f;perdir)
@@ -76,7 +76,7 @@ function advectVOF1d!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ
     getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
     @loop f[I] += fᶠ[I]-fᶠ[I+δ(d,I)] + c̄[I]*(∂(d,I,u)+∂(d,I,u⁰))*δt/2 over I∈inside(f)
 
-    reportFillError(f,u,u⁰,δt,d,tol)
+    reportFillError(f,n̂,u,u⁰,δt,d,tol)
 
     cleanWisp!(f,tol)
     BCf!(f;perdir)
@@ -134,12 +134,12 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace,ρuf,λρ) wh
 end
 
 """
-reportFillError(f,u,u⁰,d,tol)
+reportFillError(f,n̂,u,u⁰,d,tol)
 
 Report whenever `f` contains overfill or underfill elements with tolerence of `tol`.
-Meanwhile the divergence of `u` and `u⁰` is displayed.
+Meanwhile the divergence of `u` and `u⁰` is displayed, so is the normal components `n̂`.
 """
-function reportFillError(f::AbstractArray{T,D},u,u⁰,δt,d,tol) where {T,D}
+function reportFillError(f::AbstractArray{T,D},n̂,u,u⁰,δt,d,tol) where {T,D}
     maxf, maxid = findmax(f)
     minf, minid = findmin(f)
     if maxf-1 > tol
@@ -147,6 +147,9 @@ function reportFillError(f::AbstractArray{T,D},u,u⁰,δt,d,tol) where {T,D}
         @printf("|∇⋅u⁰| = %+13.8f, |∇⋅u| = %+13.8f\n",du⁰,du)
         for d∈1:D
             @printf("    %d -- uLeftδt: %+13.8f, uRightδt: %+13.8f\n", d, (u[maxid,d]+u⁰[maxid,d])*δt, (u[maxid+δ(d,maxid),d]+u⁰[maxid+δ(d,maxid),d])*δt)
+        end
+        for d∈1:D
+            @printf("   n%d -- %+13.8f\n", d, n̂[maxid,d])
         end
         errorMsg = "max VOF @ $(maxid.I) ∉ [0,1] @ direction $d, Δf = $(maxf-1)"
         (du⁰+du > 10) && error("divergence, $(du⁰+du), is exploding!")
@@ -162,6 +165,9 @@ function reportFillError(f::AbstractArray{T,D},u,u⁰,δt,d,tol) where {T,D}
         @printf("|∇⋅u⁰| = %+13.8f, |∇⋅u| = %+13.8f\n",du⁰,du)
         for d∈1:D
             @printf("    %d -- uLeftδt: %+13.8f, uRightδt: %+13.8f\n", d, (u[minid,d]+u⁰[minid,d])*δt, (u[minid+δ(d,minid),d]+u⁰[minid+δ(d,minid),d])*δt)
+        end
+        for d∈1:D
+            @printf("   n%d -- %+13.8f\n", d, n̂[minid,d])
         end
         errorMsg = "min VOF @ $(minid.I) ∉ [0,1] @ direction $d, Δf = $(-minf)"
         (du⁰+du > 10) && error("divergence, $(du⁰+du), is exploding!")
