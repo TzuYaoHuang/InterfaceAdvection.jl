@@ -108,8 +108,10 @@ function getInterfaceNormal_WH!(f::AbstractArray{T,D},n̂,I) where {T,D}
     # Get guessed dominant direction
     dominantDir = majorDir(n̂,I)
     absdoDir = abs(dominantDir)
-    absn̂dom = abs(n̂[I,absdoDir])
 
+    # Normalized the normal but make sure not division by zero in the case of undifined normal (0,0,0)
+    absn̂dom = abs(n̂[I,absdoDir])
+    absn̂dom = ifelse(absn̂dom==0, 1, absn̂dom)
     for d ∈ 1:D n̂[I,d] /= absn̂dom end
     
     for d ∈ 1:D
@@ -139,14 +141,13 @@ function getInterfaceNormal_WH!(f::AbstractArray{T,D},n̂,I) where {T,D}
         if ∑h < 4.5slope
             wb = get3CellHeight(f,I-δd(dominantDir,I), d)
             # Condition if even the bottom left cell is underfill. 
-            # NOTE: revise to consider slope?
-            if wb > 0.5 n̂[I,d] = copysign((hl-0.5)/(wb-0.5),curDir) end
+            if wb > min(1/2slope, 4.5slope) n̂[I,d] = copysign((hl-0.5)/(wb-0.5),curDir) end
         end
 
         # Interface is overfill, need bottom row.
         if ∑h > 9 - 4.5slope
             wt = get3CellHeight(f,I+δd(dominantDir,I), d)
-            if wt < 2.5 n̂[I,d] = copysign((2.5-hr)/(2.5-wt),curDir) end
+            if wt < 3-min(1/2slope, 4.5slope) n̂[I,d] = copysign((2.5-hr)/(2.5-wt),curDir) end
         end
     end
 end
