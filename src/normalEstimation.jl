@@ -95,6 +95,12 @@ function getInterfaceNormal_Column!(f::AbstractArray{T,D},n̂,I) where {T,D}
     end
 end
 
+"""
+    getInterfaceNormal_WH!(f,n̂,I)
+
+Normal reconstructure scheme from [Huang & Weymouth (2026)](). 
+It mixed column width and row height to get better first-order normal estimate.
+"""
 function getInterfaceNormal_WH!(f::AbstractArray{T,D},n̂,I) where {T,D}
     # Initial guess on normal based on pure central difference
     getInterfaceNormal_Column!(f,n̂,I)
@@ -111,8 +117,10 @@ function getInterfaceNormal_WH!(f::AbstractArray{T,D},n̂,I) where {T,D}
             continue
         end
 
+        # we do not care whether air or water is on the top now
         slope = abs(n̂[I,d])
 
+        # make sure interface is always tilting like \ instead of /
         curDir = copysign(d, n̂[I,d])
 
         # height of column from i-1, i, i+1
@@ -121,17 +129,24 @@ function getInterfaceNormal_WH!(f::AbstractArray{T,D},n̂,I) where {T,D}
         hr = get3CellHeight(f,I+δd(curDir,I),absdoDir)
         ∑h = hl+hc+hr
 
+        # Within the correct estimate of column difference
+        # 4.5slope is the area of the triangle form by the slope.
         if 4.5slope ≤ ∑h ≤ 9-4.5slope
             continue
         end
 
+        # Interface is underfill, eed bottom row.
         if ∑h < 4.5slope
             wb = get3CellHeight(f,I-δd(dominantDir,I), d)
-            n̂[I,d] = copysign((hl-0.5)/(wb-0.5),curDir)
+            # Condition if even the bottom left cell is underfill. 
+            # NOTE: revise to consider slope?
+            if wb > 0.5 n̂[I,d] = copysign((hl-0.5)/(wb-0.5),curDir) end
         end
+
+        # Interface is overfill, need bottom row.
         if ∑h > 9 - 4.5slope
             wt = get3CellHeight(f,I+δd(dominantDir,I), d)
-            n̂[I,d] = copysign((2.5-hr)/(2.5-wt),curDir) # what if hr > 2.5
+            if wt < 2.5 n̂[I,d] = copysign((2.5-hr)/(2.5-wt),curDir) end
         end
     end
 end
