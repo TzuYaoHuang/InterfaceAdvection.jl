@@ -111,7 +111,7 @@ function getInterfaceNormal_WH!(f::AbstractArray{T,D},n̂,I) where {T,D}
 
     # Normalized the normal but make sure not division by zero in the case of undifined normal (0,0,0)
     absn̂dom = abs(n̂[I,absdoDir])
-    absn̂dom = ifelse(absn̂dom==0, 1, absn̂dom)
+    absn̂dom = ifelse(absn̂dom==0, T(1), absn̂dom)
     for d ∈ 1:D n̂[I,d] /= absn̂dom end
     
     for d ∈ 1:D
@@ -186,7 +186,7 @@ function getInterfaceNormal_MYC!(f::AbstractArray{T,n},n̂,I) where {T,n}
     maxNhat = T(0)
     for i∈1:n maxNhat = ifelse(abs(n̂[I,i])>maxNhat, abs(n̂[I,i]), maxNhat) end
 
-    curm0 = 0
+    curm0 = T(0)
     CCiz = 0
     for iz∈1:n
         curNhat = getInterfaceNormal_CCi(f,n̂,I,iz)
