@@ -117,7 +117,7 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace,ρuf,λρ) wh
     ICell = ifelse(δl>0, IFace-δ(d,IFace), IFace)
     
     # Full or empty cell
-    sumAbsNhat=0
+    sumAbsNhat=T(0)
     for ii∈1:D sumAbsNhat+= abs(n̂[ICell,ii]) end
     if sumAbsNhat==0 || fullorempty(f[ICell])
         fᶠ[IFace] = f[ICell]*δl
