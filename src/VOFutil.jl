@@ -125,8 +125,14 @@ end
 Clean out values in `f` too close to 0 or 1. The margin is 10 times the resolution of float type `T`.
 """
 function cleanWisp!(f::AbstractArray{T,D}, tol=10eps(T)) where {T,D}
-    @loop f[I] = ifelse(f[I]<  tol, T(0), f[I]) over I∈inside(f)
-    @loop f[I] = ifelse(f[I]>1-tol, T(1), f[I]) over I∈inside(f)
+    @loop (
+        f[I] = ifelse(f[I]<tol, 
+            T(0), 
+            ifelse(f[I]>1-tol, 
+                T(1), 
+                f[I])
+            )
+    ) over I∈inside(f)
 end
 
 
