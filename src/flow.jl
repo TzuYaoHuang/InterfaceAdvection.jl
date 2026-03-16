@@ -325,6 +325,7 @@ end
 
 import WaterLily: increment!
 smooth!(p) = GaussSeidelRB!(p;it=32)
+# smooth!(p) = WaterLily.pcg!(p)
 function solver!(ml::MultiLevelPoisson;tol=1e-4,itmx=32)
     p = ml.levels[1]
     residual!(p); r₂ = L₂(p)
