@@ -8,7 +8,7 @@ end
 
 using Printf
 import WaterLily: div,δ
-import InterfaceAdvection: reportFillError
+import InterfaceAdvection: reportFillError, backend_sync!
 
 """
     __init__()
@@ -16,6 +16,8 @@ import InterfaceAdvection: reportFillError
 Asserts AMDGPU is functional when loading this extension.
 """
 __init__() = @assert AMDGPU.functional()
+
+backend_sync!(::ROCArray) = AMDGPU.synchronize()
 
 
 function reportFillError(f::ROCArray{T,D},u,u⁰,δt,d,tol) where {T,D}

@@ -1,7 +1,7 @@
 module InterfaceAdvection
 
 # some necessary function from WaterLily
-using WaterLily,Printf
+using WaterLily,Printf,NVTX
 import WaterLily: @loop,div,inside,∂,inside_u,CI,CIj,slice,size_u, NoBody, check_fn
 
 include("util.jl")

@@ -71,12 +71,12 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; 
     # BCf!(f;perdir)
 end
 
-function advectVOF1d!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir=(), tol=10eps(T)) where {T,D}
+NVTX.@annotate function advectVOF1d!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir=(), tol=10eps(T)) where {T,D}
     reconstructInterface!(f,α,n̂;perdir)
     getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
     @loop f[I] += fᶠ[I]-fᶠ[I+δ(d,I)] + c̄[I]*(∂(d,I,u)+∂(d,I,u⁰))*δt/2 over I∈inside(f)
 
-    reportFillError(f,n̂,u,u⁰,δt,d,tol)
+    # reportFillError(f,n̂,u,u⁰,δt,d,tol)
 
     cleanWisp!(f,tol)
     BCf!(f;perdir)
@@ -102,7 +102,7 @@ The reconstructed dark fluid volume orverlapped with the advection sweep volume 
 - `ρuf`: mass flux of collocated faces
 - `λρ`: density ratio
 """
-function getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
+NVTX.@annotate function getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
     fᶠ .= 0
     @loop getVOFFlux!(fᶠ,f,α,n̂,δt/2*(u[IFace,d]+u⁰[IFace,d]),d,IFace, ρuf,λρ) over IFace∈inside_uWB(size(f),d)
     # 👿🤬 do not FUCKING put `ρuf ./= δt` here or else the second direction will be devided twice and make simulation explode

@@ -6,9 +6,9 @@ else
     using ..CUDA
 end
 
-using Printf
+using Printf,NVTX
 import WaterLily: div,δ
-import InterfaceAdvection: reportFillError
+import InterfaceAdvection: reportFillError, backend_sync!
 
 """
     __init__()
@@ -17,8 +17,10 @@ Asserts CUDA is functional when loading this extension.
 """
 __init__() = @assert CUDA.functional()
 
+backend_sync!(::CuArray) = CUDA.synchronize()
 
-function reportFillError(f::CuArray{T,D},n̂,u,u⁰,δt,d,tol) where {T,D}
+
+NVTX.@annotate function reportFillError(f::CuArray{T,D},n̂,u,u⁰,δt,d,tol) where {T,D}
     maxf, maxid = findmax(f)
     minf, minid = findmin(f)
     if maxf-1 > tol

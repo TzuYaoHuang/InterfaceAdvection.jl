@@ -1,6 +1,8 @@
 import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ
 import LinearAlgebra: ⋅
 
+backend_sync!(::Any) = nothing
+
 # I need to re-define the flux limiter or else the TVD property cannot conserve
 @fastmath upwind(u,c,d) = c
 @fastmath cen(u,c,d) = (c+d)/2
@@ -69,7 +71,10 @@ end
     @log "p"
     dtCoeff = T(1/2)
 
-    u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,a.uBC,a.exitBC,a.perdir)
+    NVTX.@range "u2ρu!" begin
+        u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); 
+    end
+    BC!(c.ρu,a.uBC,a.exitBC,a.perdir)
     advectfq!(a, c, c.f⁰, a.u⁰, a.u, a.u, δt)
 
     # TODO: include measure
@@ -89,7 +94,10 @@ end
     @log "c"
     c.f⁰ .= c.f
 
-    u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,a.uBC,a.exitBC,a.perdir)
+    NVTX.@range "u2ρu!" begin
+        u2ρu!(c.ρu,a.u⁰,c.f,c.λρ)
+    end
+    BC!(c.ρu,a.uBC,a.exitBC,a.perdir)
     advectfq!(a, c, c.f, a.u, a.u, a.u⁰, δt)
     
     # TODO: include measure
@@ -107,7 +115,7 @@ end
 end
 
 # Forcing with the unit of ρu instead of u
-function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
+NVTX.@annotate function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     N,D = size_u(u)
     r .= 0
 
@@ -152,7 +160,7 @@ advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[en
     dirO=ntuple(i->mod(length(a.Δt)+i,D)+1, D)
 )
 
-function advectVOFρuu!(
+NVTX.@annotate function advectVOFρuu!(
     f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,
     ρu, r, Φ, ρuf, uStar, uOld, dilaU, dρ, λρ, uBC; 
     perdir=(),exitBC=false, dirO=shuffle(1:D)) where {T,D}
@@ -184,7 +192,9 @@ function advectVOFρuu!(
         δt = OpCoeff[iOp]*Δt
 
         # uStar is c.n̂ which will be overwritten in advecVOF so better to be another vector field first.
-        ρu2u!(r,ρu,f,λρ); BC!(r,uBC,exitBC,perdir)
+        NVTX.@range "ρu2u!" begin
+            ρu2u!(r,ρu,f,λρ); BC!(r,uBC,exitBC,perdir)
+        end
 
         Φ .= f  # store old volume fraction
         # advect VOF field in d direction
@@ -231,7 +241,7 @@ lowerBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{true}) = @loop (
 upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
-function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=1)
+NVTX.@annotate function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=1)
     a = 1/w-1
     @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)/(1+a) over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
@@ -240,7 +250,7 @@ function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=1)
     @loop u[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(u)
 end
 
-function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
+NVTX.@annotate function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
     for d∈1:D
         @loop μ₀[I,d] /= getρ(d,I,f,λρ) over I∈inside(f)
     end
@@ -248,7 +258,7 @@ function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
 end
 
 # NOTE: Do not use @fastmath for CFL. It has problem dealing with maximum function in GPU.
-@inline function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=one(T),safetyMargin=T(0.8)) where {D,T}
+@inline NVTX.@annotate function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=one(T),safetyMargin=T(0.8)) where {D,T}
     timeNow = sum(a.Δt)
     a.σ .= zero(T)
 
@@ -302,7 +312,7 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
     perBC!(p.x,p.perdir)
 end
 
-function myproject!(a::Flow{n,T},b::AbstractPoisson,w=1) where {n,T}
+NVTX.@annotate function myproject!(a::Flow{n,T},b::AbstractPoisson,w=1) where {n,T}
     dt = w*a.Δt[end]
     inproject!(a,b,dt)
     for i ∈ 1:n  # apply solution and unscale to recover pressure
@@ -311,40 +321,50 @@ function myproject!(a::Flow{n,T},b::AbstractPoisson,w=1) where {n,T}
     b.x ./= dt
 end
 
-@inline function inproject!(a::Flow{n,T},b::Poisson,dt) where {n,T}
+@inline NVTX.@annotate function inproject!(a::Flow{n,T},b::Poisson,dt) where {n,T}
     b.z .= 0; b.ϵ .= 0; b.r .= 0
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
     psolver!(b;tol=50eps(T),itmx=2000)
 end
 
-@inline function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
+@inline NVTX.@annotate function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
     # b.z .= 0; b.r .= 0
-    @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
-    solver!(b;tol=50eps(T),itmx=200)
+    @inside b.z[I] = div(I,a.u); NVTX.@range "scalep" begin b.x .*= dt end  # set source term & solution IC
+    solver!(b;tol=50eps(T),itmx=4)
 end
 
-import WaterLily: increment!
-smooth!(p) = GaussSeidelRB!(p;it=32)
-# smooth!(p) = WaterLily.pcg!(p)
-function solver!(ml::MultiLevelPoisson;tol=1e-4,itmx=32)
+NVTX.@annotate function increment!(p::Poisson)
+    perBC!(p.ϵ,p.perdir)
+    NVTX.@range "sync_afterperBC!" begin backend_sync!(p.x) end
+    @loop (p.r[I] = p.r[I]-mult(I,p.L,p.D,p.ϵ);
+           p.x[I] = p.x[I]+p.ϵ[I]) over I ∈ inside(p.x)
+    NVTX.@range "sync_afterrx!" begin backend_sync!(p.x) end
+end
+smooth!(p) = GaussSeidelRB!(p;it=6)
+# @inline NVTX.@annotate function smooth!(p) WaterLily.pcg!(p) end
+# smooth!(p) = WaterLily.Jacobi!(p;it=6)
+NVTX.@annotate function solver!(ml::MultiLevelPoisson;tol=1e-4,itmx=32)
     p = ml.levels[1]
-    residual!(p); r₂ = L₂(p)
+    NVTX.@range "residual!" begin residual!(p);  end
+    NVTX.@range "sync_before_L₂(init)" begin backend_sync!(p.x) end
+    NVTX.@range "L₂" begin r₂ = L₂(p) end
     nᵖ=0; @log ", $nᵖ, $(L∞(p)), $r₂\n"
     while nᵖ<itmx
-        Vcycle!(ml)
-        smooth!(p);
-        r₂ = L₂(p); 
+        NVTX.@range "Vcycle!" begin Vcycle!(ml) end
+        NVTX.@range "smooth!" begin smooth!(p) end
+        # NVTX.@range "sync_before_L₂" begin backend_sync!(p.x) end
+        NVTX.@range "r₂ =" begin r₂ = NVTX.@range "L₂" begin L₂(p) end end
         nᵖ+=1
         @log ", $nᵖ, $(L∞(p)), $r₂\n"
         r₂<tol && break
     end
-    perBC!(p.x,p.perdir)
+    NVTX.@range "perBC!" begin perBC!(p.x,p.perdir) end
     push!(ml.n,nᵖ);
     # println("$(nᵖ), $(r₂)")
 end
 
 import WaterLily: Jacobi!, restrict!,prolongate!
-function Vcycle!(ml::MultiLevelPoisson;l=1)
+NVTX.@annotate function Vcycle!(ml::MultiLevelPoisson;l=1)
     fine,coarse = ml.levels[l],ml.levels[l+1]
     # set up coarse level
     Jacobi!(fine)
@@ -365,13 +385,17 @@ Gauss-Seidel Red-Black smoother run `it` times.
 Note: This runs for general backends, but `@loop`s over `inside(p.x)` twice.
 A `@vecloop` over `odds` & `evens` would reduce work at the cost of a look-up.
 """
-function GaussSeidelRB!(p; it=6)
-    gauss(I,x,r,L,D,iD,flag) = sum(I.I)%2==flag && (x[I] += (r[I]-mult(I,L,D,x))*iD[I])
+gauss(x,r,L,D,iD,I,flag) = sum(I.I)%2==flag && (x[I] += (r[I]-mult(I,L,D,x))*iD[I])
+NVTX.@annotate function GaussSeidelRB!(p; it=6)
     @inside p.ϵ[I] = p.r[I]*p.iD[I]  # initialize ϵ
     for _ in 1:it
-        perBC!(p.ϵ,p.perdir)
-        @loop gauss(I,p.ϵ,p.r,p.L,p.D,p.iD,0) over I ∈ inside(p.x) # "red"
-        @loop gauss(I,p.ϵ,p.r,p.L,p.D,p.iD,1) over I ∈ inside(p.x) # "black"
+        NVTX.@range "perBC!" begin perBC!(p.ϵ,p.perdir) end
+        NVTX.@range "sync_afterperBC!" begin backend_sync!(p.x) end
+        # NOTE: Put sync insdie perBC and check if there is raise condition
+        # Check it that is also the case in PCG.
+        @loop gauss(p.ϵ,p.r,p.L,p.D,p.iD,I,0) over I ∈ inside(p.x) # "red"
+        @loop gauss(p.ϵ,p.r,p.L,p.D,p.iD,I,1) over I ∈ inside(p.x) # "black"
+        NVTX.@range "sync_afterRB" begin backend_sync!(p.x) end
     end
     increment!(p) # increment solution and residual
     # println("Hi")
