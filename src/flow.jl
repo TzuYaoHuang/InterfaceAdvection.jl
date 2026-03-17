@@ -318,7 +318,61 @@ end
 end
 
 @inline function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
-    b.z .= 0; b.r .= 0
+    # b.z .= 0; b.r .= 0
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
-    solver!(b;tol=10000eps(T),itmx=1e3)
+    solver!(b;tol=50eps(T),itmx=200)
+end
+
+import WaterLily: increment!
+smooth!(p) = GaussSeidelRB!(p;it=32)
+# smooth!(p) = WaterLily.pcg!(p)
+function solver!(ml::MultiLevelPoisson;tol=1e-4,itmx=32)
+    p = ml.levels[1]
+    residual!(p); r₂ = L₂(p)
+    nᵖ=0; @log ", $nᵖ, $(L∞(p)), $r₂\n"
+    while nᵖ<itmx
+        Vcycle!(ml)
+        smooth!(p);
+        r₂ = L₂(p); 
+        nᵖ+=1
+        @log ", $nᵖ, $(L∞(p)), $r₂\n"
+        r₂<tol && break
+    end
+    perBC!(p.x,p.perdir)
+    push!(ml.n,nᵖ);
+    # println("$(nᵖ), $(r₂)")
+end
+
+import WaterLily: Jacobi!, restrict!,prolongate!
+function Vcycle!(ml::MultiLevelPoisson;l=1)
+    fine,coarse = ml.levels[l],ml.levels[l+1]
+    # set up coarse level
+    Jacobi!(fine)
+    restrict!(coarse.r,fine.r)
+    fill!(coarse.x,0.)
+    # solve coarse (with recursion if possible)
+    l+1<length(ml.levels) && Vcycle!(ml,l=l+1)
+    smooth!(coarse)
+    # correct fine
+    prolongate!(fine.ϵ,coarse.x)
+    increment!(fine)
+end
+
+"""
+    GaussSeidelRB!(p::Poisson; it=6)
+
+Gauss-Seidel Red-Black smoother run `it` times. 
+Note: This runs for general backends, but `@loop`s over `inside(p.x)` twice.
+A `@vecloop` over `odds` & `evens` would reduce work at the cost of a look-up.
+"""
+function GaussSeidelRB!(p; it=6)
+    gauss(I,x,r,L,D,iD,flag) = sum(I.I)%2==flag && (x[I] += (r[I]-mult(I,L,D,x))*iD[I])
+    @inside p.ϵ[I] = p.r[I]*p.iD[I]  # initialize ϵ
+    for _ in 1:it
+        perBC!(p.ϵ,p.perdir)
+        @loop gauss(I,p.ϵ,p.r,p.L,p.D,p.iD,0) over I ∈ inside(p.x) # "red"
+        @loop gauss(I,p.ϵ,p.r,p.L,p.D,p.iD,1) over I ∈ inside(p.x) # "black"
+    end
+    increment!(p) # increment solution and residual
+    # println("Hi")
 end
