@@ -206,6 +206,7 @@ NVTX.@annotate function advectVOFρuu!(
         uStar .= r
         ρuf ./= δt; BC!(ρuf,uBC,exitBC,perdir)
         advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dρ, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
+        NVTX.@range "sync_afterAdv1D" begin backend_sync!(r) end
     end
 end
 
