@@ -389,10 +389,24 @@ A `@vecloop` over `odds` & `evens` would reduce work at the cost of a look-up.
 """
 gauss(x,r,L,D,iD,I,flag) = sum(I.I)%2==flag && (x[I] += (r[I]-mult(I,L,D,x))*iD[I])
 gauss(x,r,L,D,iD,I) = (x[I] += (r[I]-mult(I,L,D,x))*iD[I])
+
+@fastmath @inline function mult_LU(I::CartesianIndex{d},L,x) where {d}
+    s = zero(eltype(x))
+    for i in 1:d
+        s += @inbounds(x[I-δ(i,I)]*L[I,i] + x[I+δ(i,I)]*L[I+δ(i,I),i])
+    end
+    return s
+end
+
+@fastmath @inline function gauss(I::CartesianIndex{d},r,L,iD,x) where {d}
+    s = @inbounds(r[I]) - mult_LU(I,L,x)
+    return s*@inbounds(iD[I])
+end
+
 function gauss_rb(x,r,L,D,iD,color,Iv)
     k = 2*Iv.I[end] - (sum(Iv.I[1:end-1]) + color) % 2
     I = CartesianIndex(Iv.I[1:end-1]..., k)+oneunit(Iv)
-    x[I] += (r[I] - mult(I,L,D,x)) * iD[I]
+    x[I] = gauss(I,r,L,iD,x)
 end
 
 function half_rangez(x::AbstractArray{T,N}) where{T,N}
