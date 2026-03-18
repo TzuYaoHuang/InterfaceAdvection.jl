@@ -13,16 +13,23 @@ function applyVOF!(f,α,n̂,InterfaceSDF)
 end
 @inline function applyVOF!(f::AbstractArray{T,D},α::AbstractArray{T,D},n̂::AbstractArray{T,Dv},InterfaceSDF,I) where {T,D,Dv}
     # forwardDiff cause some problem so using finite difference
-    Δd = T(0.01)
-    for i∈1:D
-        xyzpδ = SVector{D,T}(loc(0,I) .+Δd .*δ(i,I).I)
-        xyzmδ = SVector{D,T}(loc(0,I) .-Δd .*δ(i,I).I)
-        n̂[I,i] = InterfaceSDF(xyzpδ) - InterfaceSDF(xyzmδ)
-    end
-    sumN2 = 0; for i∈1:D sumN2+= n̂[I,i]^2 end
+    Δx = T(0.01)
+    xcen = loc(0,I)
 
-    # (n̂·𝐱 - α)/|n̂| = d
-    α[I] = - √sumN2*InterfaceSDF(loc(0,I).-T(0.5))
+    sumN = zero(T)
+    sumN2 = zero(T) 
+    for i∈1:D
+        xyzpδ = SVector{D,T}([xcen[j]+ifelse(j==i,Δx,T(0)) for j∈1:D]) 
+        xyzmδ = SVector{D,T}([xcen[j]-ifelse(j==i,Δx,T(0)) for j∈1:D]) 
+        Δd = InterfaceSDF(xyzpδ) - InterfaceSDF(xyzmδ)
+        n̂[I,i] = Δd
+        sumN += Δd
+        sumN2 += Δd^2
+    end
+
+    # (n̂·(𝐱_cen-𝐱_blCorner) - α) = |n̂| d_cen
+    # 𝐱_cen-𝐱_blCorner = (0.5,0.5,0.5)
+    α[I] = sumN/2 - √sumN2*InterfaceSDF(xcen)
 
     # the PLIC estimation
     f[I] = getVolumeFraction(n̂,I,α[I])
@@ -80,14 +87,52 @@ function BCf!(d,f;perdir=())
     end
 end
 
+function BCv!(f;perdir=())
+    N = size(f)[1:end-1]; D = length(N)
+    for d∈1:D, j∈1:D
+        if j in perdir
+            @loop f[I,d] = f[CIj(j,I,N[j]-1),d] over I ∈ slice(N,1,j)
+            @loop f[I,d] = f[CIj(j,I,2),d] over I ∈ slice(N,N[j],j)
+        elseif j==d
+            @loop f[I,d] = f[I+2δ(j,I),d] over I ∈ slice(N,1,j)
+        else
+            @loop f[I,d] = f[I+δ(j,I),d] over I ∈ slice(N,1,j)
+            @loop f[I,d] = f[I-δ(j,I),d] over I ∈ slice(N,N[j],j)
+        end
+    end
+end
+
+function BCv1D!(f,d;perdir=())
+    N = size(f)
+    D = length(N)
+    for j∈1:D
+        if j in perdir
+            @loop f[I] = f[CIj(j,I,N[j]-1)] over I ∈ slice(N,1,j)
+            @loop f[I] = f[CIj(j,I,2)] over I ∈ slice(N,N[j],j)
+        elseif j==d
+            @loop f[I] = f[I+2δ(j,I)] over I ∈ slice(N,1,j)
+        else
+            @loop f[I] = f[I+δ(j,I)] over I ∈ slice(N,1,j)
+            @loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j)
+        end
+    end
+end
+
+
 """
     cleanWisp!(f; tol)
 
 Clean out values in `f` too close to 0 or 1. The margin is 10 times the resolution of float type `T`.
 """
 function cleanWisp!(f::AbstractArray{T,D}, tol=10eps(T)) where {T,D}
-    @loop f[I] = ifelse(f[I]<  tol, T(0), f[I]) over I∈inside(f)
-    @loop f[I] = ifelse(f[I]>1-tol, T(1), f[I]) over I∈inside(f)
+    @loop (
+        f[I] = ifelse(f[I]<tol, 
+            T(0), 
+            ifelse(f[I]>1-tol, 
+                T(1), 
+                f[I])
+            )
+    ) over I∈inside(f)
 end
 
 
@@ -120,12 +165,14 @@ The property of dark fluid is assumed to be 1, but can be specified with the thi
 """
 @inline @fastmath linInterpProp(f,λ,base=one(eltype(f))) = base*(λ + (1-λ)*f)
 
+using EllipsisNotation
 """
     getρ([d,]I,f,λρ)
 
 Linearly interpolate density at either `I` or `I-0.5d`.
 """
-@inline @fastmath getρ(I,f,λρ) = linInterpProp(f[I],λρ)
+@inline @fastmath getρ(I::CartesianIndex{D},f::AbstractArray{T,D},λρ) where {T,D} = linInterpProp(f[I],λρ)
+@inline @fastmath getρ(Ii::CartesianIndex{Dv},f::AbstractArray{T,D},λρ) where {T,D,Dv} = getρ(Ii.I[end],CI(Ii.I[1:end-1]),f,λρ)
 @inline @fastmath getρ(d,I,f,λρ) = linInterpProp(ϕ(d,I,f),λρ)
 
 """
@@ -171,3 +218,30 @@ end
 Convert volume flux `fᶠ` @ `I` to mash flux.
 """
 @inline @fastmath fᶠ2ρuf(I,fᶠ,δl,λρ) = δl*λρ + (1-λρ)*fᶠ[I]
+
+@fastmath getρratio!(vec, fnew::AbstractArray{T,D}, fold, λρ) where {T,D} = for d∈1:D
+    @loop vec[I,d] = getρ(d,I,fnew,λρ)/getρ(d,I,fold,λρ) over I∈inside_uWB(size(fnew),d)
+end
+
+function f2face1D!(fFace::AbstractArray{T,D}, fCen, d; perdir=()) where {T,D}
+    @loop fFace[I] = ϕ(d,I,fCen) over I∈inside(fCen)
+    BCv1D!(fFace,d;perdir)
+end
+
+function f2face!(fFace, fCen::AbstractArray{T,D}; perdir=()) where {T,D}
+    for d∈1:D
+        @loop fFace[I,d] = ϕ(d,I,fCen) over I∈inside_uWB(size(fCen),d)
+    end
+    BCv!(fFace;perdir)
+end
+
+"""
+    getInterfaceCenter(n̂,α,I)
+
+To calculate the quasi-center of line or plane segments in cell `I` by projecting the cell center to the plane.
+"""
+function getInterfaceCenter(n̂::AbstractArray{T,nv},α::AbstractArray{T,n},I::CartesianIndex{n}) where{T,n,nv}
+    nLocal = @views n̂[I,:]
+    dis = (0.5sum(nLocal) - α[I])/√sum(abs2,nLocal)
+    return -dis*nLocal/√sum(abs2,nLocal)
+end

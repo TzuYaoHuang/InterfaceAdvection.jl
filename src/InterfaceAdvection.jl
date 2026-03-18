@@ -2,7 +2,7 @@ module InterfaceAdvection
 
 # some necessary function from WaterLily
 using WaterLily,Printf
-import WaterLily: @loop,div,inside,∂,inside_u,CI,CIj,slice,size_u, NoBody
+import WaterLily: @loop,div,inside,∂,inside_u,CI,CIj,slice,size_u, NoBody, check_fn
 
 include("util.jl")
 
@@ -10,7 +10,7 @@ include("VOFutil.jl")
 export applyVOF!, BCVOF!,containInterface,fullorempty
 
 include("normalEstimation.jl")
-export reconstructInterface!, getInterfaceNormal_WY!, getInterfaceNormal_PCD!
+export reconstructInterface!, getInterfaceNormal_WY!, getInterfaceNormal_PCD!, getInterfaceNormal_WH!, getInterfaceNormal_MYC!, getInterfaceNormal_Y!
 
 include("PLIC.jl")
 export getIntercept, getVolumeFraction
@@ -47,7 +47,7 @@ Constructor for a WaterLily.jl two phase simulation, which is identical to the o
     - `U`: Simulation velocity scale.
     - `Δt`: Initial time step.
     - `ν`: Scaled kinemetic viscosity (`Re=UL/ν`).
-    - `g`: Domain acceleration, `g(i,t)=duᵢ/dt`
+    - `g`: Domain acceleration, `g(i,x,t)=duᵢ/dt`
     - `ϵ`: BDIM kernel width.
     - `perdir`: Domain periodic boundary condition in the `(i,)` direction.
     - `exitBC`: Convective exit boundary condition in the `i=1` direction.
@@ -70,23 +70,26 @@ mutable struct TwoPhaseSimulation <: AbstractSimulation
     body :: AbstractBody
     pois :: AbstractPoisson
     intf :: cVOF
-    function TwoPhaseSimulation(dims::NTuple{N}, u_BC, L::Number;
+    function TwoPhaseSimulation(dims::NTuple{N}, uBC, L::Number;
                         Δt=0.25, ν=0., g=nothing, U=nothing, ϵ=1, perdir=(),
                         λμ=1e-2,λρ=1e-3,η=0,
                         InterfaceSDF::Function=(x) -> -5-x[1],
                         uλ=nothing, exitBC=false, body::AbstractBody=NoBody(),
                         T=Float64, mem=Array) where N 
-        @assert !(isa(u_BC,Function) && isa(uλ,Function)) "`u_BC` and `uλ` cannot be both specified as Function"
-        @assert !(isnothing(U) && isa(u_BC,Function)) "`U` must be specified if `u_BC` is a Function"
-        isa(u_BC,Function) && @assert all(typeof.(ntuple(i->u_BC(i,zero(T)),N)).==T) "`u_BC` is not type stable"
-        uλ = isnothing(uλ) ? ifelse(isa(u_BC,Function),(i,x)->u_BC(i,0.),(i,x)->u_BC[i]) : uλ
-        U = isnothing(U) ? √sum(abs2,u_BC) : U # default if not specified
-        flow = Flow(dims,u_BC;uλ,Δt,ν,g,T,f=mem,perdir,exitBC)
+        # same as waterlily
+        @assert !(isnothing(U) && isa(uBC,Function)) "`U` (velocity scale) must be specified if boundary conditions `uBC` is a `Function`"
+        isnothing(U) && (U = √sum(abs2,uBC))
+        check_fn(uBC,N,T,3); check_fn(g,N,T,3); check_fn(uλ,N,T,2)
+        flow = Flow(dims,uBC;uλ,Δt,ν,g,T,f=mem,perdir,exitBC)
         measure!(flow,body;ϵ)
+
+        # multipahse part
         intf = cVOF(dims;arr=mem,T,InterfaceSDF,μ=ν,λμ,λρ,η,perdir)
-        println("μ: $(intf.μ), λρ: $(intf.λρ)")
+
+        # correct wrong CFL
         flow.Δt .= min(flow.Δt[end],MPCFL(flow,intf))
-        new(U,L,ϵ,flow,body,Poisson(flow.p,flow.μ₀,flow.σ;perdir),intf)
+
+        new(U,L,ϵ,flow,body,MultiLevelPoisson(flow.p,flow.μ₀,flow.σ;perdir,maxlevels=4),intf)
     end
 end
 
@@ -111,6 +114,10 @@ end
 
 export sim_step!
 
+import WaterLily: load!
+function load! end
+export load!
+
 # Backward compatibility for extensions
 if !isdefined(Base, :get_extension)
     using Requires
@@ -119,6 +126,7 @@ function __init__()
     @static if !isdefined(Base, :get_extension)
         @require AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e" include("../ext/IntfAdvAMDGPUExt.jl")
         @require CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba" include("../ext/IntfAdvCUDAExt.jl")
+        @require ReadVTK = "dc215faf-f008-4882-a9f7-a79a826fadc3" include("../ext/IntfAdvReadVTKExt.jl")
     end
 end
 

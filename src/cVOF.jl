@@ -23,8 +23,9 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
     # Varable for energy-conserving scheme
     ρu :: Vf  # momentum
     ρuf:: Vf  # mass flux from VOF advection
-    ρf :: Vf
-    uOld::Vf 
+
+    # Interface-aware Flux limiter
+    dρ :: Vf # face-center density change indicator
 
     # physical properties
     μ  :: Union{T,Nothing}   # store dynamcs viscosity of dark fluid (corresponding to ν)
@@ -62,16 +63,20 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         # Energy conserving
         ρu = zeros(T,Nv) |> arr
         ρuf= zeros(T,Nv) |> arr
-        ρf= zeros(T,Nv) |> arr
-        uOld= zeros(T,Nv) |> arr
+
+        # Interface-aware Flux limiter
+        dρ = ones(T,Nv) |> arr
 
         # correct η
         ηc = ifelse(η==0,nothing,η)
         μc = ifelse(μ==0,nothing,μ)
 
+        println("μ: $(μc), λρ: $(λρ)")
+
         new{D,T,typeof(f),typeof(n̂)}(
             f, f⁰, α, n̂, fᶠ, c̄,
-            ρu, ρuf, ρf, uOld,
+            ρu, ρuf,
+            dρ,
             μc, λρ, λμ, ηc,
             perdir
         )
