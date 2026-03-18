@@ -389,17 +389,27 @@ A `@vecloop` over `odds` & `evens` would reduce work at the cost of a look-up.
 """
 gauss(x,r,L,D,iD,I,flag) = sum(I.I)%2==flag && (x[I] += (r[I]-mult(I,L,D,x))*iD[I])
 gauss(x,r,L,D,iD,I) = (x[I] += (r[I]-mult(I,L,D,x))*iD[I])
+function gauss_rb(x,r,L,D,iD,color,Iv)
+    k = 2*Iv.I[end] - (sum(Iv.I[1:end-1]) + color) % 2
+    I = CartesianIndex(Iv.I[1:end-1]..., k)+oneunit(Iv)
+    x[I] += (r[I] - mult(I,L,D,x)) * iD[I]
+end
+
+function half_rangez(x::AbstractArray{T,N}) where{T,N}
+    Nin = size(x) .- 2
+    return CartesianIndices(ntuple((i) -> ifelse(i==N,1:Nin[i]÷2,1:Nin[i]), N))
+end
 NVTX.@annotate function GaussSeidelRB!(p; it=6)
     @inside p.ϵ[I] = p.r[I]*p.iD[I]  # initialize ϵ
-    redIdx = p.redIdx
-    blackIdx = p.blackIdx
+
+    half_range = half_rangez(p.x)
     for _ in 1:it
         NVTX.@range "perBC!" begin perBC!(p.ϵ,p.perdir) end
         NVTX.@range "sync_afterperBC!" begin backend_sync!(p.x) end
         # NOTE: Put sync insdie perBC and check if there is raise condition
         # Check it that is also the case in PCG.
-        @vecloop gauss(p.ϵ,p.r,p.L,p.D,p.iD,I) over I ∈ redIdx # "red"
-        @vecloop gauss(p.ϵ,p.r,p.L,p.D,p.iD,I) over I ∈ blackIdx # "black"
+        @loop gauss_rb(p.x,p.r,p.L,p.D,p.iD,0,I) over I ∈ half_range  # red
+        @loop gauss_rb(p.x,p.r,p.L,p.D,p.iD,1,I) over I ∈ half_range  # black
         NVTX.@range "sync_afterRB" begin backend_sync!(p.x) end
     end
     increment!(p) # increment solution and residual
