@@ -399,7 +399,10 @@ gauss(x,r,L,D,iD,I) = (x[I] += (r[I]-mult(I,L,D,x))*iD[I])
 end
 
 @fastmath @inline function gauss(I::CartesianIndex{d},r,L,iD,x) where {d}
-    s = @inbounds(r[I]) - mult_LU(I,L,x)
+    s = @inbounds(r[I])
+    for i in 1:d
+        s -= @inbounds(x[I-δ(i,I)]*L[I,i] + x[I+δ(i,I)]*L[I+δ(i,I),i])
+    end
     return s*@inbounds(iD[I])
 end
 
@@ -416,15 +419,15 @@ end
 NVTX.@annotate function GaussSeidelRB!(p; it=6)
     @inside p.ϵ[I] = p.r[I]*p.iD[I]  # initialize ϵ
 
-    half_range = half_rangez(p.x)
+    half_range = half_rangez(p.ϵ)
     for _ in 1:it
         NVTX.@range "perBC!" begin perBC!(p.ϵ,p.perdir) end
-        NVTX.@range "sync_afterperBC!" begin backend_sync!(p.x) end
+        NVTX.@range "sync_afterperBC!" begin backend_sync!(p.ϵ) end
         # NOTE: Put sync insdie perBC and check if there is raise condition
         # Check it that is also the case in PCG.
-        @loop gauss_rb(p.x,p.r,p.L,p.D,p.iD,0,I) over I ∈ half_range  # red
-        @loop gauss_rb(p.x,p.r,p.L,p.D,p.iD,1,I) over I ∈ half_range  # black
-        NVTX.@range "sync_afterRB" begin backend_sync!(p.x) end
+        @loop gauss_rb(p.ϵ,p.r,p.L,p.D,p.iD,0,I) over I ∈ half_range  # red
+        @loop gauss_rb(p.ϵ,p.r,p.L,p.D,p.iD,1,I) over I ∈ half_range  # black
+        NVTX.@range "sync_afterRB" begin backend_sync!(p.ϵ) end
     end
     increment!(p) # increment solution and residual
     # println("Hi")
