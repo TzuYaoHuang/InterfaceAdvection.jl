@@ -357,7 +357,7 @@ NVTX.@annotate function solver!(ml::MultiLevelPoisson;tol=1e-4,itmx=32)
         NVTX.@range "r₂ =" begin r₂ = NVTX.@range "L₂" begin L₂(p) end end
         nᵖ+=1
         @log ", $nᵖ, $(L∞(p)), $r₂\n"
-        r₂<tol && break
+        # r₂<tol && break
     end
     NVTX.@range "perBC!" begin perBC!(p.x,p.perdir) end
     push!(ml.n,nᵖ);
