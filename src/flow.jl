@@ -1,5 +1,6 @@
 import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ
 import LinearAlgebra: ⋅
+import BiotSavartBCs: @vecloop
 
 backend_sync!(::Any) = nothing
 
@@ -206,6 +207,7 @@ NVTX.@annotate function advectVOFρuu!(
         uStar .= r
         ρuf ./= δt; BC!(ρuf,uBC,exitBC,perdir)
         advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dρ, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
+        NVTX.@range "sync_afterAdv1D" begin backend_sync!(r) end
     end
 end
 
@@ -356,7 +358,7 @@ NVTX.@annotate function solver!(ml::MultiLevelPoisson;tol=1e-4,itmx=32)
         NVTX.@range "r₂ =" begin r₂ = NVTX.@range "L₂" begin L₂(p) end end
         nᵖ+=1
         @log ", $nᵖ, $(L∞(p)), $r₂\n"
-        r₂<tol && break
+        # r₂<tol && break
     end
     NVTX.@range "perBC!" begin perBC!(p.x,p.perdir) end
     push!(ml.n,nᵖ);
@@ -386,15 +388,18 @@ Note: This runs for general backends, but `@loop`s over `inside(p.x)` twice.
 A `@vecloop` over `odds` & `evens` would reduce work at the cost of a look-up.
 """
 gauss(x,r,L,D,iD,I,flag) = sum(I.I)%2==flag && (x[I] += (r[I]-mult(I,L,D,x))*iD[I])
+gauss(x,r,L,D,iD,I) = (x[I] += (r[I]-mult(I,L,D,x))*iD[I])
 NVTX.@annotate function GaussSeidelRB!(p; it=6)
     @inside p.ϵ[I] = p.r[I]*p.iD[I]  # initialize ϵ
+    redIdx = p.redIdx
+    blackIdx = p.blackIdx
     for _ in 1:it
         NVTX.@range "perBC!" begin perBC!(p.ϵ,p.perdir) end
         NVTX.@range "sync_afterperBC!" begin backend_sync!(p.x) end
         # NOTE: Put sync insdie perBC and check if there is raise condition
         # Check it that is also the case in PCG.
-        @loop gauss(p.ϵ,p.r,p.L,p.D,p.iD,I,0) over I ∈ inside(p.x) # "red"
-        @loop gauss(p.ϵ,p.r,p.L,p.D,p.iD,I,1) over I ∈ inside(p.x) # "black"
+        @vecloop gauss(p.ϵ,p.r,p.L,p.D,p.iD,I) over I ∈ redIdx # "red"
+        @vecloop gauss(p.ϵ,p.r,p.L,p.D,p.iD,I) over I ∈ blackIdx # "black"
         NVTX.@range "sync_afterRB" begin backend_sync!(p.x) end
     end
     increment!(p) # increment solution and residual
