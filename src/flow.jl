@@ -342,8 +342,8 @@ NVTX.@annotate function increment!(p::Poisson)
            p.x[I] = p.x[I]+p.ϵ[I]) over I ∈ inside(p.x)
     NVTX.@range "sync_afterrx!" begin backend_sync!(p.x) end
 end
-smooth!(p) = GaussSeidelRB!(p;it=6)
-# @inline NVTX.@annotate function smooth!(p) WaterLily.pcg!(p) end
+# smooth!(p) = GaussSeidelRB!(p;it=6)
+smooth!(p) = pcg!(p) 
 # smooth!(p) = WaterLily.Jacobi!(p;it=6)
 NVTX.@annotate function solver!(ml::MultiLevelPoisson;tol=1e-4,itmx=32)
     p = ml.levels[1]
@@ -431,4 +431,40 @@ NVTX.@annotate function GaussSeidelRB!(p; it=6)
     end
     increment!(p) # increment solution and residual
     # println("Hi")
+end
+
+NVTX.@annotate function pcg!(p::Poisson{T};it=6) where T
+    x,r,ϵ,z = p.x,p.r,p.ϵ,p.z
+    @inside z[I] = ϵ[I] = r[I]*p.iD[I]
+    rho = r⋅z
+    # abs(rho)<10eps(T) && return
+    for i in 1:it
+        NVTX.@range "perBC!" begin perBC!(ϵ,p.perdir); backend_sync!(ϵ) end
+        NVTX.@range "z=mult" begin 
+            @inside z[I] = mult(I,p.L,p.D,ϵ) # get value will be slow
+            backend_sync!(ϵ)
+        end
+        NVTX.@range "alpha" begin 
+            alpha = rho/(z⋅ϵ)
+        end
+        # (abs(alpha)<1e-2 || abs(alpha)>1e2) && return # alpha should be O(1)
+        NVTX.@range "xrIncrement" begin 
+            @loop (x[I] += alpha*ϵ[I];
+               r[I] -= alpha*z[I]) over I ∈ inside(x)
+        end
+        i==it && return
+        NVTX.@range "z=r*iD" begin 
+            @inside z[I] = r[I]*p.iD[I]
+            backend_sync!(ϵ)
+        end
+        NVTX.@range "rho2" begin 
+            rho2 = r⋅z
+        end
+        # abs(rho2)<10eps(T) && return
+        beta = rho2/rho
+        NVTX.@range "eps=beta*eps+I" begin 
+            @inside ϵ[I] = beta*ϵ[I]+z[I]
+        end
+        rho = rho2
+    end
 end
