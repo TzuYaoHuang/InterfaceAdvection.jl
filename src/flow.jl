@@ -1,5 +1,5 @@
 import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ
-import LinearAlgebra: ⋅
+import LinearAlgebra: ⋅, rmul!, axpy!
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
 @fastmath upwind(u,c,d) = c
@@ -61,7 +61,7 @@ end
 
 
 @fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
-    a.u⁰ .= a.u; c.f⁰ .= c.f
+    copyto!(a.u⁰, a.u); copyto!(c.f⁰, c.f)
     t₁ = sum(a.Δt); t₀ = t₁-δt; tₘ = t₁-δt/2
     # TODO: check if BC doable for ρu
 
@@ -73,7 +73,7 @@ end
     advectfq!(a, c, c.f⁰, a.u⁰, a.u, a.u, δt)
 
     # TODO: include measure
-    a.μ₀ .= 1
+    fill!(a.μ₀,1)
     @. c.f⁰ = (c.f⁰+c.f)/2
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
@@ -82,18 +82,18 @@ end
     update!(b)
     myproject!(a,b,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
 
-    # c.f .= c.f⁰
-    # a.u .= a.u⁰
+    # copyto!(c.f, c.f⁰)
+    # copyto!(a.u, a.u⁰)
 
     # corrector u(n) → u(n+1) with u(n+1/2∘)
     @log "c"
-    c.f⁰ .= c.f
+    copyto!(c.f⁰, c.f)
 
     u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,a.uBC,a.exitBC,a.perdir)
     advectfq!(a, c, c.f, a.u, a.u, a.u⁰, δt)
     
     # TODO: include measure
-    a.μ₀ .= 1
+    fill!(a.μ₀,1)
     # TODO: viscous term and surface tension term should be evaluated 
     # at the end of time step to avoid divide by wrong ρ
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
@@ -109,7 +109,7 @@ end
 # Forcing with the unit of ρu instead of u
 function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     N,D = size_u(u)
-    r .= 0
+    fill!(r,0)
 
     # i is velocity direction (uᵢ)
     # j is face direction (differential) (∂ⱼ)
@@ -186,22 +186,22 @@ function advectVOFρuu!(
         # uStar is c.n̂ which will be overwritten in advecVOF so better to be another vector field first.
         ρu2u!(r,ρu,f,λρ); BC!(r,uBC,exitBC,perdir)
 
-        Φ .= f  # store old volume fraction
+        copyto!(Φ, f) # store old volume fraction
         # advect VOF field in d direction
-        ρuf .= 0
+        fill!(ρuf, 0)
         advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
 
         # advect uᵢ in d direction
         f2face!(dρ, Φ; perdir) # fold
-        uStar .= r
-        ρuf ./= δt; BC!(ρuf,uBC,exitBC,perdir)
+        copyto!(uStar,r)
+        rmul!(ρuf, inv(δt)); BC!(ρuf,uBC,exitBC,perdir)
         advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dρ, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
     end
 end
 
 function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, ρ̄∂ⱼuⱼ, u, u⁰, c̄, λρ, d, δt; perdir=())
     N,D = size_u(u)
-    r .= 0
+    fill!(r,0)
     j = d
     @loop ρ̄∂ⱼuⱼ[I] = getρ(I,c̄,λρ)*(∂(d,I,u)+∂(d,I,u⁰))/2 over I∈inside(Φ)
     BCf!(ρ̄∂ⱼuⱼ;perdir)
@@ -218,7 +218,7 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, ρ̄∂ⱼuⱼ, u, u
 
         @loop r[I,i] += uOld[I,i] * ϕ(i,I,ρ̄∂ⱼuⱼ) over I ∈ inside(Φ)
     end
-    @loop ρu[Ii] += r[Ii]*δt over Ii∈CartesianIndices(ρu)
+    axpy!(δt, r, ρu)
 end
 
 # Neumann BC Building block
@@ -232,12 +232,12 @@ upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{true}) = @loop r[
 
 
 function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=1)
-    a = 1/w-1
-    @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)/(1+a) over Ii∈CartesianIndices(ρu)
+    a = inv(w)-1
+    @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)*w over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
-    forcing .= 0
+    fill!(forcing,0)
     accelerate!(forcing,tNow,g,uBC)
-    @loop u[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(u)
+    axpy!(dt*w, forcing, u)
 end
 
 function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
@@ -250,7 +250,7 @@ end
 # NOTE: Do not use @fastmath for CFL. It has problem dealing with maximum function in GPU.
 @inline function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=one(T),safetyMargin=T(0.8)) where {D,T}
     timeNow = sum(a.Δt)
-    a.σ .= zero(T)
+    fill!(a.σ,0)
 
     # From WaterLily
     @inside a.σ[I] = flux_out(I,a.u)
@@ -308,18 +308,18 @@ function myproject!(a::Flow{n,T},b::AbstractPoisson,w=1) where {n,T}
     for i ∈ 1:n  # apply solution and unscale to recover pressure
         @loop a.u[I,i] -= b.L[I,i]*∂(i,I,b.x) over I ∈ inside(b.x)
     end
-    b.x ./= dt
+    rmul!(b.x, inv(dt))
 end
 
 @inline function inproject!(a::Flow{n,T},b::Poisson,dt) where {n,T}
-    b.z .= 0; b.ϵ .= 0; b.r .= 0
-    @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
+    fill!(b.z,0); fill!(b.ϵ,0); fill!(b.r, 0)
+    @inside b.z[I] = div(I,a.u); rmul!(b.x, dt) # set source term & solution IC
     psolver!(b;tol=50eps(T),itmx=2000)
 end
 
 @inline function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
-    # b.z .= 0; b.r .= 0
-    @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
+    # fill!(b.z,0); fill!(b.ϵ,0); fill!(b.r, 0)
+    @inside b.z[I] = div(I,a.u); rmul!(b.x, dt) # set source term & solution IC
     solver!(b;tol=50eps(T),itmx=200)
 end
 

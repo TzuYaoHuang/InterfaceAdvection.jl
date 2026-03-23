@@ -28,7 +28,7 @@ This is the expanded function for `advect!`.
 function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; perdir=(), dirO=shuffle(1:D)) where {T,D}
     tol = 10eps(T)
 
-    ρuf .= 0
+    fill!(ρuf, 0)
 
     # get for dilation term
     @loop c̄[I] = ifelse(f[I]<0.5,0,1) over I ∈ CartesianIndices(f)
@@ -103,7 +103,7 @@ The reconstructed dark fluid volume orverlapped with the advection sweep volume 
 - `λρ`: density ratio
 """
 function getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
-    fᶠ .= 0
+    fill!(fᶠ, 0)
     @loop getVOFFlux!(fᶠ,f,α,n̂,δt/2*(u[IFace,d]+u⁰[IFace,d]),d,IFace, ρuf,λρ) over IFace∈inside_uWB(size(f),d)
     # 👿🤬 do not FUCKING put `ρuf ./= δt` here or else the second direction will be devided twice and make simulation explode
 end
