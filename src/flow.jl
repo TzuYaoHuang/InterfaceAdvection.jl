@@ -1,4 +1,5 @@
 import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ
+using LinearAlgebra
 import LinearAlgebra: ⋅
 import BiotSavartBCs: @vecloop
 
@@ -137,6 +138,7 @@ NVTX.@annotate function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η
     end
 
     surfTen!(r,f,α,n̂,fbuffer,η;perdir)
+    backend_sync!(f)
 end
 
 # Viscous forcing overload
@@ -160,6 +162,7 @@ advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[en
     # dirO=shuffle(1:D)
     dirO=ntuple(i->mod(length(a.Δt)+i,D)+1, D)
 )
+
 
 NVTX.@annotate function advectVOFρuu!(
     f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,
@@ -193,30 +196,59 @@ NVTX.@annotate function advectVOFρuu!(
         δt = OpCoeff[iOp]*Δt
 
         # uStar is c.n̂ which will be overwritten in advecVOF so better to be another vector field first.
-        NVTX.@range "ρu2u!" begin
-            ρu2u!(r,ρu,f,λρ); BC!(r,uBC,exitBC,perdir)
+        ρu2u!(r,ρu,f,λρ); 
+
+        NVTX.@range "BC u" begin
+            BC!(r,uBC,exitBC,perdir)
+            backend_sync!(r)
         end
 
-        Φ .= f  # store old volume fraction
+        NVTX.@range "Φ .= f" begin
+            copyto!(Φ, f)  # store old volume fraction
+            backend_sync!(r)
+        end
+        
         # advect VOF field in d direction
-        ρuf .= 0
+        NVTX.@range "ρuf .= 0" begin
+            fill!(ρuf, 0)  # store old volume fraction
+            backend_sync!(r)
+        end
         advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
 
         # advect uᵢ in d direction
         f2face!(dρ, Φ; perdir) # fold
-        uStar .= r
-        ρuf ./= δt; BC!(ρuf,uBC,exitBC,perdir)
+        NVTX.@range "uStar .= r" begin
+            copyto!(uStar, r)  # store old volume fraction
+            backend_sync!(r)
+        end
+        NVTX.@range "ρuf ./= δt;" begin
+            rmul!(ρuf, inv(δt));  # store old volume fraction
+            backend_sync!(r)
+        end
+        NVTX.@range "BC ruf" begin
+            BC!(ρuf,uBC,exitBC,perdir)
+            backend_sync!(r)
+        end
+        
         advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dρ, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
-        NVTX.@range "sync_afterAdv1D" begin backend_sync!(r) end
     end
 end
 
-function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, ρ̄∂ⱼuⱼ, u, u⁰, c̄, λρ, d, δt; perdir=())
+NVTX.@annotate function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, ρ̄∂ⱼuⱼ, u, u⁰, c̄, λρ, d, δt; perdir=())
     N,D = size_u(u)
-    r .= 0
+    NVTX.@range "r .= 0" begin
+    fill!(r,0)
+    backend_sync!(r)
+    end
+    
     j = d
+    NVTX.@range "ρ̄∂ⱼuⱼ" begin
     @loop ρ̄∂ⱼuⱼ[I] = getρ(I,c̄,λρ)*(∂(d,I,u)+∂(d,I,u⁰))/2 over I∈inside(Φ)
     BCf!(ρ̄∂ⱼuⱼ;perdir)
+    backend_sync!(r)
+    end
+    
+    
     for i∈1:D
         tagper = (j∈perdir)
         # treatment for bottom boundary with BCs
@@ -230,7 +262,12 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, ρ̄∂ⱼuⱼ, u, u
 
         @loop r[I,i] += uOld[I,i] * ϕ(i,I,ρ̄∂ⱼuⱼ) over I ∈ inside(Φ)
     end
-    @loop ρu[Ii] += r[Ii]*δt over Ii∈CartesianIndices(ρu)
+    backend_sync!(r)
+    NVTX.@range "ru += r*dt" begin
+        axpy!(δt,r,ρu)
+    # @loop ρu[Ii] += r[Ii]*δt over Ii∈CartesianIndices(ρu)
+    backend_sync!(r)
+    end
 end
 
 # Neumann BC Building block
@@ -331,7 +368,13 @@ end
 
 @inline NVTX.@annotate function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
     # b.z .= 0; b.r .= 0
-    @inside b.z[I] = div(I,a.u); NVTX.@range "scalep" begin b.x .*= dt end  # set source term & solution IC
+    @inside b.z[I] = div(I,a.u); 
+    backend_sync!(a.u)
+    NVTX.@range "scalep" begin 
+        # b.x .*= dt
+        rmul!(b.x,dt) 
+        backend_sync!(a.u)
+    end  # set source term & solution IC
     solver!(b;tol=50eps(T),itmx=4)
 end
 
@@ -342,8 +385,8 @@ NVTX.@annotate function increment!(p::Poisson)
            p.x[I] = p.x[I]+p.ϵ[I]) over I ∈ inside(p.x)
     NVTX.@range "sync_afterrx!" begin backend_sync!(p.x) end
 end
-# smooth!(p) = GaussSeidelRB!(p;it=6)
-smooth!(p) = pcg!(p) 
+smooth!(p) = GaussSeidelRB!(p;it=6)
+# smooth!(p) = pcg!(p) 
 # smooth!(p) = WaterLily.Jacobi!(p;it=6)
 NVTX.@annotate function solver!(ml::MultiLevelPoisson;tol=1e-4,itmx=32)
     p = ml.levels[1]
@@ -421,13 +464,14 @@ NVTX.@annotate function GaussSeidelRB!(p; it=6)
 
     half_range = half_rangez(p.ϵ)
     for _ in 1:it
-        NVTX.@range "perBC!" begin perBC!(p.ϵ,p.perdir) end
-        NVTX.@range "sync_afterperBC!" begin backend_sync!(p.ϵ) end
+        NVTX.@range "perBC!" begin perBC!(p.ϵ,p.perdir); backend_sync!(p.ϵ) end
         # NOTE: Put sync insdie perBC and check if there is raise condition
         # Check it that is also the case in PCG.
-        @loop gauss_rb(p.ϵ,p.r,p.L,p.D,p.iD,0,I) over I ∈ half_range  # red
-        @loop gauss_rb(p.ϵ,p.r,p.L,p.D,p.iD,1,I) over I ∈ half_range  # black
-        NVTX.@range "sync_afterRB" begin backend_sync!(p.ϵ) end
+        NVTX.@range "RB" begin 
+            @loop gauss_rb(p.ϵ,p.r,p.L,p.D,p.iD,0,I) over I ∈ half_range  # red
+            @loop gauss_rb(p.ϵ,p.r,p.L,p.D,p.iD,1,I) over I ∈ half_range  # black
+            backend_sync!(p.ϵ) 
+        end
     end
     increment!(p) # increment solution and residual
     # println("Hi")

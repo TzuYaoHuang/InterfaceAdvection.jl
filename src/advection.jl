@@ -74,8 +74,10 @@ end
 NVTX.@annotate function advectVOF1d!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir=(), tol=10eps(T)) where {T,D}
     reconstructInterface!(f,α,n̂;perdir)
     getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
-    @loop f[I] += fᶠ[I]-fᶠ[I+δ(d,I)] + c̄[I]*(∂(d,I,u)+∂(d,I,u⁰))*δt/2 over I∈inside(f)
-
+    NVTX.@range "update f" begin
+        @loop f[I] += fᶠ[I]-fᶠ[I+δ(d,I)] + c̄[I]*(∂(d,I,u)+∂(d,I,u⁰))*δt/2 over I∈inside(f)
+        backend_sync!(f)
+    end
     # reportFillError(f,n̂,u,u⁰,δt,d,tol)
 
     cleanWisp!(f,tol)
@@ -106,6 +108,7 @@ NVTX.@annotate function getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
     fᶠ .= 0
     @loop getVOFFlux!(fᶠ,f,α,n̂,δt/2*(u[IFace,d]+u⁰[IFace,d]),d,IFace, ρuf,λρ) over IFace∈inside_uWB(size(f),d)
     # 👿🤬 do not FUCKING put `ρuf ./= δt` here or else the second direction will be devided twice and make simulation explode
+    backend_sync!(f)
 end
 function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace,ρuf,λρ) where {T,D}
     # if face velocity is zero
@@ -129,7 +132,7 @@ function getVOFFlux!(fᶠ,f::AbstractArray{T,D},α,n̂,δl,d,IFace,ρuf,λρ) wh
     a = ifelse(δl>0, α[ICell]-n̂[ICell,d]*(1-δl), α[ICell])
     n̂Cell = ntuple((ii)->n̂[ICell,ii]*ifelse(ii==d,abs(δl),1),D)
     fᶠ[IFace] = getVolumeFraction(n̂Cell, a)*δl
-    ρuf[IFace,d] += fᶠ2ρuf(IFace,fᶠ,δl,λρ)
+    ρuf[IFace,d] = fᶠ2ρuf(IFace,fᶠ,δl,λρ)
     return nothing
 end
 

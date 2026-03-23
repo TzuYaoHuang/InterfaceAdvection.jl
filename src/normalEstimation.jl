@@ -5,8 +5,9 @@
 
 Reconstruct interface from volume fraction field (`f`), involving normal calculation (`n̂`) and then the intercept (`α`).
 """
-function reconstructInterface!(f,α,n̂;perdir=())
+NVTX.@annotate function reconstructInterface!(f,α,n̂;perdir=())
     @loop reconstructInterface!(f,α,n̂,I) over I∈inside(f)
+    backend_sync!(f)
     BCVOF!(f,α,n̂;perdir)
 end
 function reconstructInterface!(f::AbstractArray{T,D},α,n̂,I) where {T,D}

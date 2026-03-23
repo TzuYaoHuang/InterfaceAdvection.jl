@@ -40,7 +40,7 @@ end
 
 Apply boundary condition to volume fraction, intercept, and normal with Neumann or Periodic ways
 """
-function BCVOF!(f,α,n̂;perdir=())
+NVTX.@annotate function BCVOF!(f,α,n̂;perdir=())
     N,D = size_u(n̂)
     for j∈1:D
         if j in perdir
@@ -51,6 +51,7 @@ function BCVOF!(f,α,n̂;perdir=())
             @loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j)
         end
     end
+    backend_sync!(f)
 end
 function fαn̂!(f::AbstractArray{T,D},α,n̂, I,j,ii) where {T,D}
     f[I] = f[CIj(j,I,ii)]
@@ -60,7 +61,7 @@ function fαn̂!(f::AbstractArray{T,D},α,n̂, I,j,ii) where {T,D}
     α[I] = α[CIj(j,I,ii)]
 end
 
-function BCf!(f;perdir=())
+NVTX.@annotate function BCf!(f;perdir=())
     N = size(f); D = length(N)
     for j∈1:D
         if j in perdir
@@ -71,6 +72,7 @@ function BCf!(f;perdir=())
             @loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j)
         end
     end
+    backend_sync!(f)
 end
 function BCf!(d,f;perdir=())
     N = size(f); D = length(N)
@@ -87,7 +89,7 @@ function BCf!(d,f;perdir=())
     end
 end
 
-function BCv!(f;perdir=())
+NVTX.@annotate function BCv!(f;perdir=())
     N = size(f)[1:end-1]; D = length(N)
     for d∈1:D, j∈1:D
         if j in perdir
@@ -100,6 +102,7 @@ function BCv!(f;perdir=())
             @loop f[I,d] = f[I-δ(j,I),d] over I ∈ slice(N,N[j],j)
         end
     end
+    backend_sync!(f)
 end
 
 function BCv1D!(f,d;perdir=())
@@ -124,7 +127,7 @@ end
 
 Clean out values in `f` too close to 0 or 1. The margin is 10 times the resolution of float type `T`.
 """
-function cleanWisp!(f::AbstractArray{T,D}, tol=10eps(T)) where {T,D}
+NVTX.@annotate function cleanWisp!(f::AbstractArray{T,D}, tol=10eps(T)) where {T,D}
     @loop (
         f[I] = ifelse(f[I]<tol, 
             T(0), 
@@ -133,6 +136,7 @@ function cleanWisp!(f::AbstractArray{T,D}, tol=10eps(T)) where {T,D}
                 f[I])
             )
     ) over I∈inside(f)
+    backend_sync!(f)
 end
 
 
@@ -197,7 +201,10 @@ end
 
 Convert mass flux `ρu` to velocity `u` at the corresponding momentum cell.
 """
-ρu2u!(u,ρu,f,λρ) = @loop ρu2u!(u,ρu,f,λρ,I) over I∈inside(f)
+NVTX.@annotate function ρu2u!(u,ρu,f,λρ) 
+    @loop ρu2u!(u,ρu,f,λρ,I) over I∈inside(f) 
+    backend_sync!(u)
+end
 @inline @fastmath ρu2u!(u,ρu,f::AbstractArray{T,D},λρ,I) where {T,D} = for d∈1:D
     u[I,d] = ρu[I,d]/getρ(d,I,f,λρ)
 end
@@ -207,7 +214,10 @@ end
 
 Convert velocity `u` to mass flux `ρu` at the corresponding momentum cell.
 """
-u2ρu!(ρu,u,f,λρ) = @loop u2ρu!(ρu,u,f,λρ,I) over I∈inside(f)
+NVTX.@annotate function u2ρu!(ρu,u,f,λρ) 
+    @loop u2ρu!(ρu,u,f,λρ,I) over I∈inside(f) 
+    backend_sync!(u)
+end
 @inline @fastmath u2ρu!(ρu,u,f::AbstractArray{T,D},λρ,I) where {T,D} = for d∈1:D
     ρu[I,d] = u[I,d]*getρ(d,I,f,λρ)
 end
@@ -228,10 +238,11 @@ function f2face1D!(fFace::AbstractArray{T,D}, fCen, d; perdir=()) where {T,D}
     BCv1D!(fFace,d;perdir)
 end
 
-function f2face!(fFace, fCen::AbstractArray{T,D}; perdir=()) where {T,D}
+NVTX.@annotate function f2face!(fFace, fCen::AbstractArray{T,D}; perdir=()) where {T,D}
     for d∈1:D
         @loop fFace[I,d] = ϕ(d,I,fCen) over I∈inside_uWB(size(fCen),d)
     end
+    backend_sync!(fFace)
     BCv!(fFace;perdir)
 end
 
