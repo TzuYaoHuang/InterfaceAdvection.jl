@@ -61,7 +61,7 @@ end
 
 
 @fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
-    a.u⁰ .= a.u; c.f⁰ .= c.f
+    copyto!(a.u⁰, a.u); copyto!(c.f⁰, c.f)
     t₁ = sum(a.Δt); t₀ = t₁-δt; tₘ = t₁-δt/2
     # TODO: check if BC doable for ρu
 
@@ -82,12 +82,12 @@ end
     update!(b)
     myproject!(a,b,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
 
-    # c.f .= c.f⁰
-    # a.u .= a.u⁰
+    # copyto!(c.f, c.f⁰)
+    # copyto!(a.u, a.u⁰)
 
     # corrector u(n) → u(n+1) with u(n+1/2∘)
     @log "c"
-    c.f⁰ .= c.f
+    copyto!(c.f⁰, c.f)
 
     u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,a.uBC,a.exitBC,a.perdir)
     advectfq!(a, c, c.f, a.u, a.u, a.u⁰, δt)
@@ -186,14 +186,14 @@ function advectVOFρuu!(
         # uStar is c.n̂ which will be overwritten in advecVOF so better to be another vector field first.
         ρu2u!(r,ρu,f,λρ); BC!(r,uBC,exitBC,perdir)
 
-        Φ .= f  # store old volume fraction
+        copyto!(Φ, f) # store old volume fraction
         # advect VOF field in d direction
         fill!(ρuf, 0)
         advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
 
         # advect uᵢ in d direction
         f2face!(dρ, Φ; perdir) # fold
-        uStar .= r
+        copyto!(uStar,r)
         ρuf ./= δt; BC!(ρuf,uBC,exitBC,perdir)
         advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dρ, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
     end
