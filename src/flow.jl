@@ -250,7 +250,7 @@ end
 # NOTE: Do not use @fastmath for CFL. It has problem dealing with maximum function in GPU.
 @inline function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=one(T),safetyMargin=T(0.8)) where {D,T}
     timeNow = sum(a.Δt)
-    a.σ .= zero(T)
+    fill!(a.σ,0)
 
     # From WaterLily
     @inside a.σ[I] = flux_out(I,a.u)
