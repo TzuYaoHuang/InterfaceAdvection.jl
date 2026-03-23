@@ -73,7 +73,7 @@ end
     advectfq!(a, c, c.f⁰, a.u⁰, a.u, a.u, δt)
 
     # TODO: include measure
-    a.μ₀ .= 1
+    fill!(a.μ₀,1)
     @. c.f⁰ = (c.f⁰+c.f)/2
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
@@ -93,7 +93,7 @@ end
     advectfq!(a, c, c.f, a.u, a.u, a.u⁰, δt)
     
     # TODO: include measure
-    a.μ₀ .= 1
+    fill!(a.μ₀,1)
     # TODO: viscous term and surface tension term should be evaluated 
     # at the end of time step to avoid divide by wrong ρ
     MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
@@ -109,7 +109,7 @@ end
 # Forcing with the unit of ρu instead of u
 function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     N,D = size_u(u)
-    r .= 0
+    fill!(r,0)
 
     # i is velocity direction (uᵢ)
     # j is face direction (differential) (∂ⱼ)
@@ -188,7 +188,7 @@ function advectVOFρuu!(
 
         Φ .= f  # store old volume fraction
         # advect VOF field in d direction
-        ρuf .= 0
+        fill!(ρuf, 0)
         advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
 
         # advect uᵢ in d direction
@@ -201,7 +201,7 @@ end
 
 function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, ρ̄∂ⱼuⱼ, u, u⁰, c̄, λρ, d, δt; perdir=())
     N,D = size_u(u)
-    r .= 0
+    fill!(r,0)
     j = d
     @loop ρ̄∂ⱼuⱼ[I] = getρ(I,c̄,λρ)*(∂(d,I,u)+∂(d,I,u⁰))/2 over I∈inside(Φ)
     BCf!(ρ̄∂ⱼuⱼ;perdir)
@@ -235,7 +235,7 @@ function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=1)
     a = 1/w-1
     @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)/(1+a) over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
-    forcing .= 0
+    fill!(forcing,0)
     accelerate!(forcing,tNow,g,uBC)
     @loop u[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(u)
 end
@@ -312,13 +312,13 @@ function myproject!(a::Flow{n,T},b::AbstractPoisson,w=1) where {n,T}
 end
 
 @inline function inproject!(a::Flow{n,T},b::Poisson,dt) where {n,T}
-    b.z .= 0; b.ϵ .= 0; b.r .= 0
+    fill!(b.z,0); fill!(b.ϵ,0); fill!(b.r, 0)
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
     psolver!(b;tol=50eps(T),itmx=2000)
 end
 
 @inline function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
-    # b.z .= 0; b.r .= 0
+    # fill!(b.z,0); fill!(b.ϵ,0); fill!(b.r, 0)
     @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
     solver!(b;tol=50eps(T),itmx=200)
 end
