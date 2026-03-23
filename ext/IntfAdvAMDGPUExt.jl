@@ -31,7 +31,7 @@ function reportFillError(f::ROCArray{T,D},u,u⁰,δt,d,tol) where {T,D}
             AMDGPU.@allowscalar @printf("   n%d -- %+13.8f\n", d, n̂[maxid,d])
         end
         errorMsg = "max VOF @ $(maxid.I) ∉ [0,1] @ direction $d, Δf = $(maxf-1)"
-        (du⁰+du > 10) && error("divergence, $(du⁰+du), is exploding!")
+        ((du⁰+du > 10) || isnan(du⁰+du)) && error("divergence, $(du⁰+du), is exploding!")
         try
             error(errorMsg)
         catch e
@@ -49,7 +49,7 @@ function reportFillError(f::ROCArray{T,D},u,u⁰,δt,d,tol) where {T,D}
             AMDGPU.@allowscalar @printf("   n%d -- %+13.8f\n", d, n̂[minid,d])
         end
         errorMsg = "min VOF @ $(minid.I) ∉ [0,1] @ direction $d, Δf = $(-minf)"
-        (du⁰+du > 10) && error("divergence, $(du⁰+du), is exploding!")
+        ((du⁰+du > 10) || isnan(du⁰+du)) && error("divergence, $(du⁰+du), is exploding!")
         try
             error(errorMsg)
         catch e
