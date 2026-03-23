@@ -233,8 +233,7 @@ upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{true}) = @loop r[
 
 function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=1)
     a = inv(w)-1
-    inv1a = inv(1+a)
-    @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)*inv1a over Ii∈CartesianIndices(ρu)
+    @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)*w over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
     fill!(forcing,0)
     accelerate!(forcing,tNow,g,uBC)
