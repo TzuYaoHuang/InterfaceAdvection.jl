@@ -1,5 +1,5 @@
 import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ
-import LinearAlgebra: ⋅
+import LinearAlgebra: ⋅, rmul!
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
 @fastmath upwind(u,c,d) = c
@@ -194,7 +194,7 @@ function advectVOFρuu!(
         # advect uᵢ in d direction
         f2face!(dρ, Φ; perdir) # fold
         copyto!(uStar,r)
-        ρuf ./= δt; BC!(ρuf,uBC,exitBC,perdir)
+        rmul!(ρuf, inv(δt)); BC!(ρuf,uBC,exitBC,perdir)
         advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, dρ, dilaU, u, u⁰, c̄, λρ, d, δt; perdir)
     end
 end
@@ -308,18 +308,18 @@ function myproject!(a::Flow{n,T},b::AbstractPoisson,w=1) where {n,T}
     for i ∈ 1:n  # apply solution and unscale to recover pressure
         @loop a.u[I,i] -= b.L[I,i]*∂(i,I,b.x) over I ∈ inside(b.x)
     end
-    b.x ./= dt
+    rmul!(b.x, inv(dt))
 end
 
 @inline function inproject!(a::Flow{n,T},b::Poisson,dt) where {n,T}
     fill!(b.z,0); fill!(b.ϵ,0); fill!(b.r, 0)
-    @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
+    @inside b.z[I] = div(I,a.u); rmul!(b.x, dt) # set source term & solution IC
     psolver!(b;tol=50eps(T),itmx=2000)
 end
 
 @inline function inproject!(a::Flow{n,T},b::MultiLevelPoisson,dt) where {n,T}
     # fill!(b.z,0); fill!(b.ϵ,0); fill!(b.r, 0)
-    @inside b.z[I] = div(I,a.u); b.x .*= dt # set source term & solution IC
+    @inside b.z[I] = div(I,a.u); rmul!(b.x, dt) # set source term & solution IC
     solver!(b;tol=50eps(T),itmx=200)
 end
 
