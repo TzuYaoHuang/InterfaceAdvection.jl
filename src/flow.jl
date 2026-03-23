@@ -1,5 +1,5 @@
 import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ
-import LinearAlgebra: ⋅, rmul!
+import LinearAlgebra: ⋅, rmul!, axpy!
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
 @fastmath upwind(u,c,d) = c
@@ -218,7 +218,7 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, ρ̄∂ⱼuⱼ, u, u
 
         @loop r[I,i] += uOld[I,i] * ϕ(i,I,ρ̄∂ⱼuⱼ) over I ∈ inside(Φ)
     end
-    @loop ρu[Ii] += r[Ii]*δt over Ii∈CartesianIndices(ρu)
+    axpy!(δt, r, ρu)
 end
 
 # Neumann BC Building block
@@ -232,12 +232,13 @@ upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{true}) = @loop r[
 
 
 function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=1)
-    a = 1/w-1
-    @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)/(1+a) over Ii∈CartesianIndices(ρu)
+    a = inv(w)-1
+    inv1a = inv(1+a)
+    @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)*inv1a over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
     fill!(forcing,0)
     accelerate!(forcing,tNow,g,uBC)
-    @loop u[Ii] += forcing[Ii]*dt*w over Ii∈CartesianIndices(u)
+    axpy!(dt*w, forcing, u)
 end
 
 function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
