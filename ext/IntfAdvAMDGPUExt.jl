@@ -21,6 +21,7 @@ __init__() = @assert AMDGPU.functional()
 function reportFillError(f::ROCArray{T,D},u,u⁰,δt,d,tol) where {T,D}
     maxf, maxid = findmax(f)
     minf, minid = findmin(f)
+    isnan(maxf+minf) && error("NaN!")
     if maxf-1 > tol
         AMDGPU.@allowscalar du⁰,du = abs(div(maxid,u⁰)),abs(div(maxid,u))
         @printf("|∇⋅u⁰| = %+13.8f, |∇⋅u| = %+13.8f\n",du⁰,du)
