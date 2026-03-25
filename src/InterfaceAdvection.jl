@@ -89,7 +89,7 @@ mutable struct TwoPhaseSimulation <: AbstractSimulation
         # correct wrong CFL
         flow.Δt .= min(flow.Δt[end],MPCFL(flow,intf))
 
-        new(U,L,ϵ,flow,body,MultiLevelPoisson(flow.p,flow.μ₀,flow.σ;perdir,maxlevels=4),intf)
+        new(U,L,ϵ,flow,body,MultiLevelPoisson(flow.p,flow.μ₀,flow.σ;perdir),intf)
     end
 end
 

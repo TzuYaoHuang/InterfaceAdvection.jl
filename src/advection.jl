@@ -1,6 +1,11 @@
 using Printf
 import Random: shuffle
 
+"""Helper that allows scalar indexing. Dispatches on array type."""
+function _scalar_op(op::F, ::AbstractArray) where {F<:Function}
+    op()
+end
+
 
 """
     advect!(a,c,f,u¹,u²,dt)
@@ -142,40 +147,45 @@ Meanwhile the divergence of `u` and `u⁰` is displayed, so is the normal compon
 function reportFillError(f::AbstractArray{T,D},n̂,u,u⁰,δt,d,tol) where {T,D}
     maxf, maxid = findmax(f)
     minf, minid = findmin(f)
+    isnan(maxf+minf) && error("NaN!")
     if maxf-1 > tol
-        du⁰,du = abs(div(maxid,u⁰)),abs(div(maxid,u))
-        @printf("|∇⋅u⁰| = %+13.8f, |∇⋅u| = %+13.8f\n",du⁰,du)
-        for d∈1:D
-            @printf("    %d -- uLeftδt: %+13.8f, uRightδt: %+13.8f\n", d, (u[maxid,d]+u⁰[maxid,d])*δt, (u[maxid+δ(d,maxid),d]+u⁰[maxid+δ(d,maxid),d])*δt)
-        end
-        for d∈1:D
-            @printf("   n%d -- %+13.8f\n", d, n̂[maxid,d])
-        end
-        errorMsg = "max VOF @ $(maxid.I) ∉ [0,1] @ direction $d, Δf = $(maxf-1)"
-        (du⁰+du > 10) && error("divergence, $(du⁰+du), is exploding!")
-        try
-            error(errorMsg)
-        catch e
-            Base.printstyled("ERROR: "; color=:red, bold=true)
-            Base.showerror(stdout, e, Base.catch_backtrace()); println()
+        _scalar_op(f) do
+            du⁰,du = abs(div(maxid,u⁰)),abs(div(maxid,u))
+            @printf("|∇⋅u⁰| = %+13.8f, |∇⋅u| = %+13.8f\n",du⁰,du)
+            for d∈1:D
+                @printf("    %d -- uLeftδt: %+13.8f, uRightδt: %+13.8f\n", d, (u[maxid,d]+u⁰[maxid,d])*δt, (u[maxid+δ(d,maxid),d]+u⁰[maxid+δ(d,maxid),d])*δt)
+            end
+            for d∈1:D
+                @printf("   n%d -- %+13.8f\n", d, n̂[maxid,d])
+            end
+            errorMsg = "max VOF @ $(maxid.I) ∉ [0,1] @ direction $d, Δf = $(maxf-1)"
+            ((du⁰+du > 10) || isnan(du⁰+du)) && error("divergence, $(du⁰+du), is exploding!")
+            try
+                error(errorMsg)
+            catch e
+                Base.printstyled("ERROR: "; color=:red, bold=true)
+                Base.showerror(stdout, e, Base.catch_backtrace()); println()
+            end
         end
     end
     if minf < -tol
-        du⁰,du = abs(div(minid,u⁰)),abs(div(minid,u))
-        @printf("|∇⋅u⁰| = %+13.8f, |∇⋅u| = %+13.8f\n",du⁰,du)
-        for d∈1:D
-            @printf("    %d -- uLeftδt: %+13.8f, uRightδt: %+13.8f\n", d, (u[minid,d]+u⁰[minid,d])*δt, (u[minid+δ(d,minid),d]+u⁰[minid+δ(d,minid),d])*δt)
-        end
-        for d∈1:D
-            @printf("   n%d -- %+13.8f\n", d, n̂[minid,d])
-        end
-        errorMsg = "min VOF @ $(minid.I) ∉ [0,1] @ direction $d, Δf = $(-minf)"
-        (du⁰+du > 10) && error("divergence, $(du⁰+du), is exploding!")
-        try
-            error(errorMsg)
-        catch e
-            Base.printstyled("ERROR: "; color=:red, bold=true)
-            Base.showerror(stdout, e, Base.catch_backtrace()); println()
+        _scalar_op(f) do
+            du⁰,du = abs(div(minid,u⁰)),abs(div(minid,u))
+            @printf("|∇⋅u⁰| = %+13.8f, |∇⋅u| = %+13.8f\n",du⁰,du)
+            for d∈1:D
+                @printf("    %d -- uLeftδt: %+13.8f, uRightδt: %+13.8f\n", d, (u[minid,d]+u⁰[minid,d])*δt, (u[minid+δ(d,minid),d]+u⁰[minid+δ(d,minid),d])*δt)
+            end
+            for d∈1:D
+                @printf("   n%d -- %+13.8f\n", d, n̂[minid,d])
+            end
+            errorMsg = "min VOF @ $(minid.I) ∉ [0,1] @ direction $d, Δf = $(-minf)"
+            ((du⁰+du > 10) || isnan(du⁰+du)) && error("divergence, $(du⁰+du), is exploding!")
+            try
+                error(errorMsg)
+            catch e
+                Base.printstyled("ERROR: "; color=:red, bold=true)
+                Base.showerror(stdout, e, Base.catch_backtrace()); println()
+            end
         end
     end
 end
