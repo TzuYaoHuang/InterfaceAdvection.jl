@@ -1,7 +1,26 @@
-Manifest.toml
+.ipynb_checkpoints
 .vscode/
-*.jld2
-*.png
-*.gif
 .DS_Store
-gr-temp
+Manifest.toml
+LocalPreferences.toml
+/docs/build/
+
+# gfx
+*.png
+*.jpg
+*.gif
+*.mp4
+*.svg
+*.pdf
+*.ogv
+
+# data file
+*.dat
+*.txt
+*.log
+*.json
+*.nsys-rep
+
+# paraview
+*.vti
+*.pvd
