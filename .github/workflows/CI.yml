@@ -79,4 +79,3 @@ jobs:
           fi
           julia --proj --color=yes -e "using Pkg; Pkg.instantiate(); Pkg.test(; coverage=true);"
       - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
