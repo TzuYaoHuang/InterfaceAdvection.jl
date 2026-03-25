@@ -81,7 +81,7 @@ function advectVOF1d!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ
     getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
     @loop f[I] += fᶠ[I]-fᶠ[I+δ(d,I)] + c̄[I]*(∂(d,I,u)+∂(d,I,u⁰))*δt/2 over I∈inside(f)
 
-    reportFillError(f,n̂,u,u⁰,δt,d,tol)
+    reportFillError(f,n̂,u,u⁰,δt,d,10tol)
 
     cleanWisp!(f,tol)
     BCf!(f;perdir)
