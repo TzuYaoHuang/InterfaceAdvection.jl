@@ -258,7 +258,12 @@ end
 
     @inside a.σ[I] = maxTotalFlux(I,a.u)
     Δt_cVOF = 1/2maximum(a.σ)
-    Δt_Grav = isnothing(a.g) ? Δt_max : 1/(2*√sum(i->a.g(i,zeros(SVector{D,T}),timeNow)^2, 1:D))
+
+    I = CartesianIndex(ntuple(_->1, D))
+    x = loc(I, T)
+    g = a.g
+    Δt_Grav = isnothing(g) ? Δt_max : grav_dt(g, x, timeNow, Val(D), Δt_max, T)
+
     Δt_Visc = isnothing(c.μ) ? Δt_max : 3/(14*c.μ*max(1,c.λμ/c.λρ))
     Δt_SurfT = isnothing(c.η) ? Δt_max : sqrt((1+c.λρ)/(8π*c.η))  # 8 from kelli's code
 
@@ -273,6 +278,14 @@ end
     return s
 end
 
+@inline function grav_dt(g, x, t, ::Val{D}, Δt_max, ::Type{T}) where {D,T}
+    g2 = zero(T)
+    @inbounds for i in 1:D
+        gi = g(i, x, t)
+        g2 += gi*gi
+    end
+    return inv(2*sqrt(g2))
+end
 
 function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
     perBC!(p.x,p.perdir)
