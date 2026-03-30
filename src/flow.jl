@@ -265,7 +265,7 @@ end
     Δt_Grav = isnothing(g) ? Δt_max : grav_dt(g, x, timeNow, Val(D), Δt_max, T)
 
     Δt_Visc = isnothing(c.μ) ? Δt_max : 3/(14*c.μ*max(1,c.λμ/c.λρ))
-    Δt_SurfT = isnothing(c.η) ? Δt_max : sqrt((1+c.λρ)/(8π*c.η))  # 8 from kelli's code
+    Δt_SurfT = isnothing(c.η) ? Δt_max : sqrt((1+c.λρ)/(T(8π)*c.η))  # 8 from kelli's code
 
     return safetyMargin*min(Δt_cVOF,Δt_Adv,Δt_Grav,Δt_Visc,Δt_SurfT)
 end
