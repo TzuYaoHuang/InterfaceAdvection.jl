@@ -87,7 +87,7 @@ mutable struct TwoPhaseSimulation <: AbstractSimulation
         intf = cVOF(dims;arr=mem,T,InterfaceSDF,μ=ν,λμ,λρ,η,perdir)
 
         # correct wrong CFL
-        flow.Δt .= min(flow.Δt[end],MPCFL(flow,intf))
+        flow.Δt .= min(last(flow.Δt),MPCFL(flow,intf))
 
         new(U,L,ϵ,flow,body,MultiLevelPoisson(flow.p,flow.μ₀,flow.σ;perdir),intf)
     end
@@ -103,7 +103,7 @@ function sim_step!(sim::TwoPhaseSimulation,t_end;remeasure=false,max_steps=typem
     steps₀ = length(sim.flow.Δt)
     while sim_time(sim) < t_end && length(sim.flow.Δt) - steps₀ < max_steps
         sim_step!(sim; remeasure)
-        verbose && @printf("    tU/L=%10.6f, ΔtU/L=%.10f\n",sim_time(sim),sim.flow.Δt[end]*sim.U/sim.L);
+        verbose && @printf("    tU/L=%10.6f, ΔtU/L=%.10f\n",sim_time(sim),last(sim.flow.Δt)*sim.U/sim.L);
         flush(stdout)
     end
 end

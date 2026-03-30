@@ -14,7 +14,7 @@ This is the spirit of the operator-split cVOF calculation.
 It calculates the volume fraction after one full time step.
 Volume fraction field `f` is being fluxed with the averaged of two velocity -- `u¹` and `u²`.
 """
-advect!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, dt=a.Δt[end]) where {D} = advectVOF!(
+advect!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, dt=last(a.Δt)) where {D} = advectVOF!(
     f,c.fᶠ,c.α,c.n̂,u¹,u²,dt,c.c̄,c.ρuf,c.λρ; 
     perdir=a.perdir, 
     # dirO=1:D

@@ -39,7 +39,7 @@ end
 
 function ϕq(j,i,Ii,fOld::AbstractArray{T,Dv},ρuf,u,uu,cc,dd,δt,λρ,λ) where {T,Dv}
     # I the lower face of staggered cell I
-    I = CI(Ii.I[1:end-1])
+    I = CI(Base.front(Ii.I))
     Ψ = ϕ(i,CI(I,j),ρuf)
 
     IiCell = ifelse(Ψ>0, Ii-δ(j,Ii), Ii)
@@ -60,7 +60,7 @@ function ϕq(j,i,Ii,fOld::AbstractArray{T,Dv},ρuf,u,uu,cc,dd,δt,λρ,λ) where
 end
 
 
-@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
+@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = last(a.Δt)) where {D,T}
     copyto!(a.u⁰, a.u); copyto!(c.f⁰, c.f)
     t₁ = sum(a.Δt); t₀ = t₁-δt; tₘ = t₁-δt/2
     # TODO: check if BC doable for ρu
@@ -152,7 +152,7 @@ upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(
 
 
 
-advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[end]) where {D} = advectVOFρuu!(
+advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=last(a.Δt)) where {D} = advectVOFρuu!(
     f, c.fᶠ, c.α, c.n̂, u¹, u², dt, c.c̄,
     c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.dρ, c.λρ, a.uBC;
     perdir=a.perdir, exitBC=a.exitBC,
@@ -323,7 +323,7 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
 end
 
 function myproject!(a::Flow{n,T},b::AbstractPoisson,w=1) where {n,T}
-    dt = w*a.Δt[end]
+    dt = w*last(a.Δt)
     inproject!(a,b,dt)
     for i ∈ 1:n  # apply solution and unscale to recover pressure
         @loop a.u[I,i] -= b.L[I,i]*∂(i,I,b.x) over I ∈ inside(b.x)
