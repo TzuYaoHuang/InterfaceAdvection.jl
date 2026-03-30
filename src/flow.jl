@@ -109,7 +109,7 @@ end
 # Forcing with the unit of ρu instead of u
 # This is the place for ρu forcing that does not need directional split
 function viscSurfTenρu!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
-    fr0!(r,μ,η)
+    fill!(r,0)
     visc!(r,u,ρuf,Φ,f,λμ,μ,λρ;perdir)
     surfTen!(r,f,α,n̂,fbuffer,η;perdir)
 end
@@ -126,7 +126,7 @@ function visc!(r,u,ρuf,Φ,f,λμ,μ::Number,λρ;perdir=())
     for i∈1:D, j∈1:D
         tagper = (j∈perdir)
         # treatment for bottom boundary with BCs
-        lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
+        lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
         # inner cells
         @loop (Φ[I] = - viscF(i,j,I,u,f,λμ,μ,λρ);
                 r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
@@ -267,8 +267,7 @@ end
     @inside a.σ[I] = maxTotalFlux(I,a.u)
     Δt_cVOF = 1/2maximum(a.σ)
 
-    I = CartesianIndex(ntuple(_->1, D))
-    x = loc(I, T)
+    x = zeros(SVector{D,T})
     g = a.g
     Δt_Grav = isnothing(g) ? Δt_max : grav_dt(g, x, timeNow, Val(D), Δt_max, T)
 
