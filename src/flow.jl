@@ -75,7 +75,7 @@ end
     # TODO: include measure
     fill!(a.μ₀,1)
     @. c.f⁰ = (c.f⁰+c.f)/2
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
+    viscSurfTenρu!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,tₘ,a.g,a.uBC,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
@@ -96,7 +96,7 @@ end
     fill!(a.μ₀,1)
     # TODO: viscous term and surface tension term should be evaluated 
     # at the end of time step to avoid divide by wrong ρ
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
+    viscSurfTenρu!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
@@ -107,9 +107,17 @@ end
 end
 
 # Forcing with the unit of ρu instead of u
-function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
+# This is the place for ρu forcing that does not need directional split
+function viscSurfTenρu!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
+    fr0!(r,μ,η)
+    visc!(r,u,ρuf,Φ,f,λμ,μ,λρ;perdir)
+    surfTen!(r,f,α,n̂,fbuffer,η;perdir)
+end
+
+viscSurfTenρu!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ::Nothing,λρ,η::Nothing;perdir=()) = nothing
+
+function visc!(r,u,ρuf,Φ,f,λμ,μ::Number,λρ;perdir=())
     N,D = size_u(u)
-    fill!(r,0)
 
     # i is velocity direction (uᵢ)
     # j is face direction (differential) (∂ⱼ)
@@ -118,30 +126,31 @@ function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     for i∈1:D, j∈1:D
         tagper = (j∈perdir)
         # treatment for bottom boundary with BCs
-        lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
+        upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
         # inner cells
         @loop (Φ[I] = - viscF(i,j,I,u,f,λμ,μ,λρ);
                 r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
         @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
         # treatment for upper boundary with BCs
-        upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
+        upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
     end
-
-    surfTen!(r,f,α,n̂,fbuffer,η;perdir)
 end
+visc!(r,u,ρuf,Φ,f,λμ,μ::Nothing,λρ) = nothing
+
 
 # Viscous forcing overload
-@inline viscF(i,j,I,u,f,λμ,μ::Number,λρ) = (i==j ? getμCell(i,j,I,f,λμ,μ,λρ) : getμEdge(i,j,I,f,λμ,μ,λρ)) *(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
-@inline viscF(i,j,I,u,f,λμ,μ::Nothing,λρ) = zero(eltype(f))
+@inline viscF(i,j,I,u,f,λμ,μ,λρ) = (i==j ? getμCell(i,j,I,f,λμ,μ,λρ) : getμEdge(i,j,I,f,λμ,μ,λρ)) *(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
 
 # Neumann BC Building block
-lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += - viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
-upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
+upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += - viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
+upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
 
 # Periodic BC Building block
-lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
+upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
     Φ[I] = -viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
-upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
+upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
+
+
 
 advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[end]) where {D} = advectVOFρuu!(
     f, c.fᶠ, c.α, c.n̂, u¹, u², dt, c.c̄,
@@ -151,7 +160,6 @@ advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[en
     # dirO=shuffle(1:D)
     dirO=ntuple(i->mod(length(a.Δt)+i,D)+1, D)
 )
-
 function advectVOFρuu!(
     f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,
     ρu, r, Φ, ρuf, uStar, uOld, dilaU, dρ, λρ, uBC; 
