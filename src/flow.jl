@@ -39,7 +39,7 @@ end
 
 function ϕq(j,i,Ii,fOld::AbstractArray{T,Dv},ρuf,u,uu,cc,dd,δt,λρ,λ) where {T,Dv}
     # I the lower face of staggered cell I
-    I = CI(Ii.I[1:end-1])
+    I = CI(Base.front(Ii.I))
     Ψ = ϕ(i,CI(I,j),ρuf)
 
     IiCell = ifelse(Ψ>0, Ii-δ(j,Ii), Ii)
@@ -60,7 +60,7 @@ function ϕq(j,i,Ii,fOld::AbstractArray{T,Dv},ρuf,u,uu,cc,dd,δt,λρ,λ) where
 end
 
 
-@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = a.Δt[end]) where {D,T}
+@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = last(a.Δt)) where {D,T}
     copyto!(a.u⁰, a.u); copyto!(c.f⁰, c.f)
     t₁ = sum(a.Δt); t₀ = t₁-δt; tₘ = t₁-δt/2
     # TODO: check if BC doable for ρu
@@ -75,7 +75,7 @@ end
     # TODO: include measure
     fill!(a.μ₀,1)
     @. c.f⁰ = (c.f⁰+c.f)/2
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
+    viscSurfTenρu!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,tₘ,a.g,a.uBC,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
@@ -96,7 +96,7 @@ end
     fill!(a.μ₀,1)
     # TODO: viscous term and surface tension term should be evaluated 
     # at the end of time step to avoid divide by wrong ρ
-    MPFForcing!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
+    viscSurfTenρu!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
@@ -107,9 +107,17 @@ end
 end
 
 # Forcing with the unit of ρu instead of u
-function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
-    N,D = size_u(u)
+# This is the place for ρu forcing that does not need directional split
+function viscSurfTenρu!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     fill!(r,0)
+    visc!(r,u,ρuf,Φ,f,λμ,μ,λρ;perdir)
+    surfTen!(r,f,α,n̂,fbuffer,η;perdir)
+end
+
+viscSurfTenρu!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ::Nothing,λρ,η::Nothing;perdir=()) = nothing
+
+function visc!(r,u,ρuf,Φ,f,λμ,μ::Number,λρ;perdir=())
+    N,D = size_u(u)
 
     # i is velocity direction (uᵢ)
     # j is face direction (differential) (∂ⱼ)
@@ -118,32 +126,33 @@ function MPFForcing!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     for i∈1:D, j∈1:D
         tagper = (j∈perdir)
         # treatment for bottom boundary with BCs
-        lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
+        lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
         # inner cells
         @loop (Φ[I] = - viscF(i,j,I,u,f,λμ,μ,λρ);
                 r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
         @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
         # treatment for upper boundary with BCs
-        upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
+        upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
     end
-
-    surfTen!(r,f,α,n̂,fbuffer,η;perdir)
 end
+visc!(r,u,ρuf,Φ,f,λμ,μ::Nothing,λρ) = nothing
+
 
 # Viscous forcing overload
-@inline viscF(i,j,I,u,f,λμ,μ::Number,λρ) = (i==j ? getμCell(i,j,I,f,λμ,μ,λρ) : getμEdge(i,j,I,f,λμ,μ,λρ)) *(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
-@inline viscF(i,j,I,u,f,λμ,μ::Nothing,λρ) = zero(eltype(f))
+@inline viscF(i,j,I,u,f,λμ,μ,λρ) = (i==j ? getμCell(i,j,I,f,λμ,μ,λρ) : getμEdge(i,j,I,f,λμ,μ,λρ)) *(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
 
 # Neumann BC Building block
-lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += - viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
-upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
+lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += - viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
+upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
 
 # Periodic BC Building block
-lowerBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
+lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
     Φ[I] = -viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
-upperBoundary!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
+upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
-advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[end]) where {D} = advectVOFρuu!(
+
+
+advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=last(a.Δt)) where {D} = advectVOFρuu!(
     f, c.fᶠ, c.α, c.n̂, u¹, u², dt, c.c̄,
     c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.dρ, c.λρ, a.uBC;
     perdir=a.perdir, exitBC=a.exitBC,
@@ -151,7 +160,6 @@ advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=a.Δt[en
     # dirO=shuffle(1:D)
     dirO=ntuple(i->mod(length(a.Δt)+i,D)+1, D)
 )
-
 function advectVOFρuu!(
     f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,
     ρu, r, Φ, ρuf, uStar, uOld, dilaU, dρ, λρ, uBC; 
@@ -258,9 +266,13 @@ end
 
     @inside a.σ[I] = maxTotalFlux(I,a.u)
     Δt_cVOF = 1/2maximum(a.σ)
-    Δt_Grav = isnothing(a.g) ? Δt_max : 1/(2*√sum(i->a.g(i,zeros(SVector{D,T}),timeNow)^2, 1:D))
+
+    x = zeros(SVector{D,T})
+    g = a.g
+    Δt_Grav = isnothing(g) ? Δt_max : grav_dt(g, x, timeNow, Val(D), Δt_max, T)
+
     Δt_Visc = isnothing(c.μ) ? Δt_max : 3/(14*c.μ*max(1,c.λμ/c.λρ))
-    Δt_SurfT = isnothing(c.η) ? Δt_max : sqrt((1+c.λρ)/(8π*c.η))  # 8 from kelli's code
+    Δt_SurfT = isnothing(c.η) ? Δt_max : sqrt((1+c.λρ)/(T(8π)*c.η))  # 8 from kelli's code
 
     return safetyMargin*min(Δt_cVOF,Δt_Adv,Δt_Grav,Δt_Visc,Δt_SurfT)
 end
@@ -273,6 +285,14 @@ end
     return s
 end
 
+@inline function grav_dt(g, x, t, ::Val{D}, Δt_max, ::Type{T}) where {D,T}
+    g2 = zero(T)
+    @inbounds for i in 1:D
+        gi = g(i, x, t)
+        g2 += gi*gi
+    end
+    return inv(2*sqrt(g2))
+end
 
 function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
     perBC!(p.x,p.perdir)
@@ -303,7 +323,7 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
 end
 
 function myproject!(a::Flow{n,T},b::AbstractPoisson,w=1) where {n,T}
-    dt = w*a.Δt[end]
+    dt = w*last(a.Δt)
     inproject!(a,b,dt)
     for i ∈ 1:n  # apply solution and unscale to recover pressure
         @loop a.u[I,i] -= b.L[I,i]*∂(i,I,b.x) over I ∈ inside(b.x)

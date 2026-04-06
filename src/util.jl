@@ -16,10 +16,10 @@ function myArgAbsMax(vec::AbstractArray{T,D}) where {T,D}
     end
     return iMax
 end
-function myArgAbsMax(vec::AbstractArray{T,D},I) where {T,D}
+function myArgAbsMax(vec::AbstractArray{T},I::CartesianIndex{D}) where {T,D}
     max = T(0)
     iMax = 1
-    for i∈1:size(vec)[end]
+    for i∈1:D
         cur = abs2(vec[I,i])
         if cur > max
             max = cur

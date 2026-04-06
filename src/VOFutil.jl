@@ -60,8 +60,8 @@ function fαn̂!(f::AbstractArray{T,D},α,n̂, I,j,ii) where {T,D}
     α[I] = α[CIj(j,I,ii)]
 end
 
-function BCf!(f;perdir=())
-    N = size(f); D = length(N)
+function BCf!(f::AbstractArray{T,D};perdir=()) where {T,D}
+    N = size(f)
     for j∈1:D
         if j in perdir
             @loop f[I] = f[CIj(j,I,N[j]-1)] over I ∈ slice(N,1,j)
@@ -72,8 +72,8 @@ function BCf!(f;perdir=())
         end
     end
 end
-function BCf!(d,f;perdir=())
-    N = size(f); D = length(N)
+function BCf!(d,f::AbstractArray{T,D};perdir=()) where {T,D}
+    N = size(f)
     for j∈1:D
         if j in perdir
             @loop f[I] = f[CIj(j,I,N[j]-1)] over I ∈ slice(N,1,j)
@@ -88,7 +88,7 @@ function BCf!(d,f;perdir=())
 end
 
 function BCv!(f;perdir=())
-    N = size(f)[1:end-1]; D = length(N)
+    N,D = size_u(f)
     for d∈1:D, j∈1:D
         if j in perdir
             @loop f[I,d] = f[CIj(j,I,N[j]-1),d] over I ∈ slice(N,1,j)
@@ -102,9 +102,8 @@ function BCv!(f;perdir=())
     end
 end
 
-function BCv1D!(f,d;perdir=())
+function BCv1D!(f::AbstractArray{T,D},d;perdir=()) where {T,D}
     N = size(f)
-    D = length(N)
     for j∈1:D
         if j in perdir
             @loop f[I] = f[CIj(j,I,N[j]-1)] over I ∈ slice(N,1,j)
@@ -172,7 +171,7 @@ using EllipsisNotation
 Linearly interpolate density at either `I` or `I-0.5d`.
 """
 @inline @fastmath getρ(I::CartesianIndex{D},f::AbstractArray{T,D},λρ) where {T,D} = linInterpProp(f[I],λρ)
-@inline @fastmath getρ(Ii::CartesianIndex{Dv},f::AbstractArray{T,D},λρ) where {T,D,Dv} = getρ(Ii.I[end],CI(Ii.I[1:end-1]),f,λρ)
+@inline @fastmath getρ(Ii::CartesianIndex{Dv},f::AbstractArray{T,D},λρ) where {T,D,Dv} = getρ(last(Ii.I),CI(Base.front(Ii.I)),f,λρ)
 @inline @fastmath getρ(d,I,f,λρ) = linInterpProp(ϕ(d,I,f),λρ)
 
 """
