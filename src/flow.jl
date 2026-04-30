@@ -114,8 +114,6 @@ function viscSurfTenρu!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     surfTen!(r,f,α,n̂,fbuffer,η;perdir)
 end
 
-viscSurfTenρu!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ::Nothing,λρ,η::Nothing;perdir=()) = nothing
-
 function visc!(r,u,ρuf,Φ,f,λμ,μ::Number,λρ;perdir=())
     N,D = size_u(u)
 
@@ -135,7 +133,7 @@ function visc!(r,u,ρuf,Φ,f,λμ,μ::Number,λρ;perdir=())
         upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
     end
 end
-visc!(r,u,ρuf,Φ,f,λμ,μ::Nothing,λρ) = nothing
+visc!(r,u,ρuf,Φ,f,λμ,μ::Nothing,λρ;perdir=()) = nothing
 
 
 # Viscous forcing overload
