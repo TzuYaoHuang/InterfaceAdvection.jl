@@ -37,7 +37,7 @@ function load!(a::TwoPhaseSimulation, ::Val{:pvd}; kwargs...)
     @assert extent.+1 == collect(size(a.flow.p)) text
     # fill the arrays for pressure and velocity and volume fraction
     point_data = ReadVTK.get_point_data(vtk)
-    copyto!(a.flow.p, squeeze(Array(get_data_reshaped(point_data["p"]))));
+    ("p" in point_data.names) && copyto!(a.flow.p, squeeze(Array(get_data_reshaped(point_data["p"]))));
     ("f" in point_data.names) && copyto!(a.intf.f, squeeze(Array(get_data_reshaped(point_data["f"]))));
     copyto!(a.flow.u, squeeze(components_last(Array(get_data_reshaped(point_data["u"])))));
     # reset time to work with the new time step
