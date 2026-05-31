@@ -38,7 +38,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
 
     function cVOF(
         N::NTuple{D}; 
-        arr=Array, T=Float64, 
+        mem=Array, T=Float64, 
         InterfaceSDF::Function=(x)->5-x[1], 
         μ=1e-3, λμ=1e-2, λρ=1e-3, η=nothing,
         perdir=()
@@ -49,23 +49,23 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         Nv = (Ng...,D)
 
         # Allocate essential variables
-        f = ones(T,Ng) |> arr
-        α = zeros(T,Ng) |> arr
-        n̂ = zeros(T,Nv) |> arr
-        c̄ = zeros(Int8,Ng) |> arr
+        f = ones(T,Ng) |> mem
+        α = zeros(T,Ng) |> mem
+        n̂ = zeros(T,Nv) |> mem
+        c̄ = zeros(Int8,Ng) |> mem
 
         # Initialize variables
         applyVOF!(f,α,n̂,InterfaceSDF)
         BCVOF!(f,α,n̂;perdir)
-        f⁰ = copy(f) |> arr
-        fᶠ = zeros(T,Ng) |> arr
+        f⁰ = copy(f) |> mem
+        fᶠ = zeros(T,Ng) |> mem
 
         # Energy conserving
-        ρu = zeros(T,Nv) |> arr
-        ρuf= zeros(T,Nv) |> arr
+        ρu = zeros(T,Nv) |> mem
+        ρuf= zeros(T,Nv) |> mem
 
         # Interface-aware Flux limiter
-        dρ = ones(T,Nv) |> arr
+        dρ = ones(T,Nv) |> mem
 
         # correct η
         ηc = ifelse(η==0,nothing,η)
