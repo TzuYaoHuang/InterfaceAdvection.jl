@@ -80,11 +80,11 @@ mutable struct TwoPhaseSimulation <: AbstractSimulation
         @assert !(isnothing(U) && isa(uBC,Function)) "`U` (velocity scale) must be specified if boundary conditions `uBC` is a `Function`"
         isnothing(U) && (U = √sum(abs2,uBC))
         check_fn(uBC,N,T,3); check_fn(g,N,T,3); check_fn(uλ,N,T,2)
-        flow = Flow(dims,uBC;uλ,Δt,ν,g,T,f=mem,perdir,exitBC)
+        flow = Flow(dims,uBC;uλ,Δt,ν,g,T,mem,perdir,exitBC)
         measure!(flow,body;ϵ)
 
         # multipahse part
-        intf = cVOF(dims;arr=mem,T,InterfaceSDF,μ=ν,λμ,λρ,η,perdir)
+        intf = cVOF(dims;mem,T,InterfaceSDF,μ=ν,λμ,λρ,η,perdir)
 
         # correct wrong CFL
         flow.Δt .= min(last(flow.Δt),MPCFL(flow,intf))
