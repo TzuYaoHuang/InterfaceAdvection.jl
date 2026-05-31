@@ -38,7 +38,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
 
     function cVOF(
         N::NTuple{D}; 
-        mem=Array, T=Float64, 
+        mem=Array, T=Float32, 
         InterfaceSDF::Function=(x)->5-x[1], 
         μ=1e-3, λμ=1e-2, λρ=1e-3, η=nothing,
         perdir=()
