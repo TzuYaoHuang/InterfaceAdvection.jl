@@ -30,7 +30,7 @@ This is the expanded function for `advect!`.
 `c̄` is used to take care (de-)activation of dilation term.
 `ρuf` stores the mass flux for mass-momentum consistent method.
 """
-function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; perdir=(), dirO=shuffle(1:D)) where {T,D}
+function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; perdir=(), dirO=shuffle(1:D), getInterfaceNormal=getInterfaceNormal_WH!) where {T,D}
     tol = 10eps(T)
 
     fill!(ρuf, 0)
@@ -61,7 +61,7 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; 
         δt = OpCoeff[iOp]*Δt
 
         # advect VOF field in d direction
-        reconstructInterface!(f,α,n̂;perdir)
+        reconstructInterface!(f,α,n̂;perdir,getInterfaceNormal)
         getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
         @loop f[I] += fᶠ[I]-fᶠ[I+δ(d,I)] + c̄[I]*(∂(d,I,u)+∂(d,I,u⁰))*δt/2 over I∈inside(f)
 

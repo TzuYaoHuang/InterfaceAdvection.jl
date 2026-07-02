@@ -5,11 +5,11 @@
 
 Reconstruct interface from volume fraction field (`f`), involving normal calculation (`n̂`) and then the intercept (`α`).
 """
-function reconstructInterface!(f,α,n̂;perdir=())
-    @loop reconstructInterface!(f,α,n̂,I) over I∈inside(f)
+function reconstructInterface!(f,α,n̂;perdir=(),getInterfaceNormal=getInterfaceNormal_WH!)
+    @loop reconstructInterface!(f,α,n̂,I;getInterfaceNormal) over I∈inside(f)
     BCVOF!(f,α,n̂;perdir)
 end
-function reconstructInterface!(f::AbstractArray{T,D},α,n̂,I) where {T,D}
+function reconstructInterface!(f::AbstractArray{T,D},α,n̂,I;getInterfaceNormal=getInterfaceNormal_WH!) where {T,D}
     # guarding if to role out non-interface cell
     if fullorempty(f[I])
         for i∈1:D n̂[I,i] = 0 end
@@ -18,10 +18,7 @@ function reconstructInterface!(f::AbstractArray{T,D},α,n̂,I) where {T,D}
     end
 
     # get normal
-    getInterfaceNormal_WH!(f,n̂,I)
-    # getInterfaceNormal_WY!(f,n̂,I)
-    # getInterfaceNormal_MYC!(f,n̂,I)
-    # getInterfaceNormal_Column!(f,n̂,I)
+    getInterfaceNormal(f,n̂,I)
 
     # get intercept
     α[I] = getIntercept(n̂,I,f[I])
