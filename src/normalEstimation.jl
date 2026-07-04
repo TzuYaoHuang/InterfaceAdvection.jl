@@ -39,7 +39,8 @@ function getInterfaceNormal_WY!(f::AbstractArray{T,D},n̂,I) where {T,D}
     
     for d∈1:D
         if d==dominantDir
-            n̂[I,d] = sign(n̂[I,d])
+            sgn = sign(n̂[I,d])
+            n̂[I,d] = ifelse(sgn==0,1,sgn)
             continue
         end
 
@@ -78,7 +79,8 @@ function getInterfaceNormal_Column!(f::AbstractArray{T,D},n̂,I) where {T,D}
     
     for d∈1:D
         if d==dominantDir
-            n̂[I,d] = sign(n̂[I,d])
+            sgn = sign(n̂[I,d])
+            n̂[I,d] = ifelse(sgn==0,1,sgn)
             continue
         end
 
@@ -184,7 +186,7 @@ function getInterfaceNormal_MYC!(f::AbstractArray{T,n},n̂,I) where {T,n}
     for i∈1:n maxNhat = ifelse(abs(n̂[I,i])>maxNhat, abs(n̂[I,i]), maxNhat) end
 
     curm0 = T(0)
-    CCiz = 0
+    CCiz = 1  # avoid problem of all curm0 is zero
     for iz∈1:n
         curNhat = getInterfaceNormal_CCi(f,n̂,I,iz)
         if abs(curNhat[iz])>curm0 CCiz = iz end
@@ -206,7 +208,8 @@ Assume we have already calculated a guessed normal to set the direction (sign) o
 function getInterfaceNormal_CCi(f::AbstractArray{T,n},n̂,I,dc) where {T,n}
     nhat = ntuple(
         d -> if (d == dc)
-            sign(n̂[I,d])
+            sgn = sign(n̂[I,d])
+            ifelse(sgn==0,1,sgn)
         else
             hu = get3CellHeight(f, I+δ(d,I), dc)
             hd = get3CellHeight(f, I-δ(d,I), dc)
@@ -230,8 +233,14 @@ function getInterfaceNormal_Y!(f::AbstractArray{T,D},n̂,I) where {T,D}
         n̂[I,d] = (YoungSum(f,I-δ(d,I),d) - YoungSum(f,I+δ(d,I),d))*0.5
         a += abs(n̂[I,d])
     end
-    for d ∈ 1:D
-        n̂[I,d] /= a
+    if a==0 
+        for d ∈ 1:D
+            n̂[I,d] = 1/D
+        end
+    else
+        for d ∈ 1:D
+            n̂[I,d] /= a
+        end
     end
 end
 function YoungSum(f,I,d)
