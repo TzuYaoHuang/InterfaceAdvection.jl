@@ -76,11 +76,20 @@ end
 @testset "normalEstimation.jl" begin
     f = [5/12 1 2/3; 1/4 11/12 1/12; 1/12 1/3 0]
     n̂ = zeros(3,3,2)
-    getInterfaceNormal_WY!(f,n̂,CartesianIndex(2,2))
-    @test n̂[2,2,1] ≈ 1.; @test n̂[2,2,2]+0.5 ≈ 0.5
+    I = CartesianIndex(2,2)
+    getInterfaceNormal_WY!(f,n̂,I)
+    @test n̂[I,1] ≈ 1.; @test n̂[I,2]+0.5 ≈ 0.5
     f .= [0 1/3 1; 1/12 11/12 1; 1 1 1]
-    getInterfaceNormal_WY!(f,n̂,CartesianIndex(2,2))
-    @test n̂[2,2,1] ≈ -2/3; @test n̂[2,2,2] ≈ -1.
+    getInterfaceNormal_WY!(f,n̂,I)
+    @test n̂[I,1] ≈ -2/3; @test n̂[I,2] ≈ -1.
+
+    f = [0 0 0; 0 0.1 0;0 0 0] .|> Float64
+    n̂.=0
+    getInterfaceNormal_WY!(f,n̂,I)
+    @test n̂[I,1] == 1; @test n̂[I,2] == 0
+    n̂.=0
+    getInterfaceNormal_MYC!(f,n̂,I)
+    @test n̂[I,1] == 0.5; @test n̂[I,2] == 0.5
 end
 
 @testset "advection.jl" begin
