@@ -97,8 +97,8 @@ function getCurvature_Parabolic(I::CartesianIndex{2},f::AbstractArray{T,2},n̂::
 
     pvalid = (validhy0,validhy1,validhy2,validwx0,validwx1,validwx2)
 
-    S = @SMatrix [makeA(x,j,pvalid[i]) for (i,(x,y)) in enumerate(p), j in 1:3]
-    y = @SArray  [makey(y,  pvalid[i]) for (i,(x,y)) in enumerate(p)]
+    S = @SMatrix [makeA(p[i][1],j,pvalid[i]) for i in 1:6, j in 1:3]
+    y = @SArray  [makey(p[i][2],  pvalid[i]) for i in 1:6]
     a = (S'*S)\(S'*y)
 
     κ = 2a[1]/root1p5(1+a[2]^2)
