@@ -238,9 +238,45 @@ end
     getInterfaceCenter(n̂,α,I)
 
 To calculate the quasi-center of line or plane segments in cell `I` by projecting the cell center to the plane.
+
+This is an approximation: the perpendicular foot of the cell center on the (infinite) PLIC plane need not
+land on the actual interface segment/polygon, particularly when the cell is nearly full or empty. A 2D
+method that instead returns the exact segment midpoint is provided below.
 """
 function getInterfaceCenter(n̂::AbstractArray{T,nv},α::AbstractArray{T,n},I::CartesianIndex{n}) where{T,n,nv}
-    nLocal = @views n̂[I,:]
-    dis = (0.5sum(nLocal) - α[I])/√sum(abs2,nLocal)
-    return -dis*nLocal/√sum(abs2,nLocal)
+    nLocal = SVector{n,T}(ntuple(i->n̂[I,i],n))
+    nrm = √sum(abs2,nLocal)
+    dis = (0.5sum(nLocal) - α[I])/nrm
+    return -dis*nLocal/nrm
+end
+
+"""
+    getInterfaceCenter(n̂,α,I::CartesianIndex{2})
+
+Exact midpoint of the PLIC line segment cut out of cell `I` (as opposed to the generic method above,
+which only projects the cell center onto the infinite plane and can miss the cell entirely for short
+segments). Cheap closed form: reflect to the octant where both normal components are ≥0 (same trick as
+[`getIntercept`](@ref)/[`getVolumeFraction`](@ref)), locate the two edges the line crosses in that frame,
+average their crossing points, then reflect back.
+"""
+function getInterfaceCenter(n̂::AbstractArray{T,nv},α::AbstractArray{T,2},I::CartesianIndex{2}) where{T,nv}
+    n1 = n̂[I,1]; n2 = n̂[I,2]
+    m1 = abs(n1); m2 = abs(n2)
+    b = α[I] - min(n1,zero(T)) - min(n2,zero(T)) # intercept in the reflected (m1,m2≥0) frame
+
+    mlo = min(m1,m2); mhi = max(m1,m2)
+
+    mx,my = if b<=mlo          # cuts the two edges meeting at the (0,0) corner
+        b/2m1, b/2m2
+    elseif b>=mhi              # cuts the two edges meeting at the (1,1) corner
+        T(0.5)+(b-m2)/2m1, T(0.5)+(b-m1)/2m2
+    elseif m1<=m2               # cuts the two edges normal to axis 1 (x1=0 and x1=1)
+        T(0.5), b/m2-m1/2m2
+    else                        # cuts the two edges normal to axis 2 (x2=0 and x2=1)
+        b/m1-m2/2m1, T(0.5)
+    end
+
+    cx = ifelse(n1<0, 1-mx, mx)
+    cy = ifelse(n2<0, 1-my, my)
+    return SVector{2,T}(cx-T(0.5), cy-T(0.5))
 end
