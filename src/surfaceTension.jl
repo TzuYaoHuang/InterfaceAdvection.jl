@@ -58,6 +58,53 @@ function getCurvature(I::CartesianIndex{2},f::AbstractArray{T,2},i) where T
     return Hₓₓ/root1p5(1+Hₓ^2)
 end
 
+makeA(x::T,j,valid) where T = ifelse(valid, if j==1 x^2 elseif j==2 x else 1 end, T(0)) 
+makey(y::T,  valid) where T = ifelse(valid, y, T(0)) 
+function getCurvature_Parabolic(I::CartesianIndex{2},f::AbstractArray{T,2},n̂::AbstractArray{T,3}) where T
+    # align all the case so that the normal is always toward northeast
+    iy = majorDir(n̂,I)
+    ix = getXdir(iy); nx = n̂[I,abs(ix)]; sgn = ifelse(ix*nx<0,-1,1); ix*=sgn
+    absnx = abs(nx)
+
+    # Height
+    hy0 = get3CellHeight(f,I-δd(ix,I),iy)
+    hy1 = get3CellHeight(f,I         ,iy)
+    hy2 = get3CellHeight(f,I+δd(ix,I),iy)
+
+    # Width
+    wx0 = get3CellHeight(f,I-δd(iy,I),ix) - T(1.5)
+    wx1 = get3CellHeight(f,I         ,ix) - T(1.5)
+    wx2 = get3CellHeight(f,I+δd(iy,I),ix) - T(1.5)
+
+    ∑f3x3 = hy0+hy1+hy2
+
+    validhy2 = 9-1abs(nx)/2 > ∑f3x3 > 9abs(nx)/2 
+    validhy1 = 9-4abs(nx)/2 > ∑f3x3 > 4abs(nx)/2 
+    validhy0 = 9-9abs(nx)/2 > ∑f3x3 > 1abs(nx)/2 
+
+    validwx0 = 9-9/abs(nx)/2 > ∑f3x3 > 1/abs(nx)/2 
+    validwx1 = 9-4/abs(nx)/2 > ∑f3x3 > 4/abs(nx)/2 
+    validwx2 = 9-1/abs(nx)/2 > ∑f3x3 > 9/abs(nx)/2 
+
+    p = (
+        (T(-1), hy0),
+        (T( 0), hy1),
+        (T( 1), hy2),
+        (wx0, T(0.5)),
+        (wx1, T(1.5)),
+        (wx2, T(2.5))
+    )
+
+    pvalid = (validhy0,validhy1,validhy2,validwx0,validwx1,validwx2)
+
+    S = @SMatrix [makeA(x,j,pvalid[i]) for (i,(x,y)) in enumerate(p), j in 1:3]
+    y = @SArray  [makey(y,  pvalid[i]) for (i,(x,y)) in enumerate(p)]
+    a = (S'*S)\(S'*y)
+
+    κ = 2a[1]/root1p5(1+a[2]^2)
+    return ifelse(isnan(κ), T(0), κ)
+end
+
 """
     getHeight(I,f,i)
 

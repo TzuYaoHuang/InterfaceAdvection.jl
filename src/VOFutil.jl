@@ -154,7 +154,7 @@ Check whether `fc` is full of dark or light fluid.
 
 Get three cell volume summation around index `I` along direction `summingDir`.
 """
-@inline @fastmath get3CellHeight(f,I,summingDir) = f[I]+f[I-δ(summingDir,I)]+f[I+δ(summingDir,I)]
+@inline @fastmath get3CellHeight(f,I,summingDir) = f[I]+f[I-δd(summingDir,I)]+f[I+δd(summingDir,I)]
 
 """
     linInterpProp(f,λ,base=one(eltype(f)))
