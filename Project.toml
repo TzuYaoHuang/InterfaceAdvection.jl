@@ -14,6 +14,11 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 WaterLily = "ed894a53-35f9-47f1-b17f-85db9237eebd"
 
+# TEMPORARY: density_coefficient! lives on this WaterLily branch (stacked on
+# WaterLily PR #291). Remove this [sources] pin once it lands upstream.
+[sources]
+WaterLily = {url = "https://github.com/pankgeorg/WaterLily.jl", rev = "variable-density"}
+
 [weakdeps]
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"

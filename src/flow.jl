@@ -1,4 +1,4 @@
-import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ
+import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ, density_coefficient!
 import LinearAlgebra: ⋅, rmul!, axpy!
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
@@ -78,8 +78,9 @@ end
     viscSurfTenρu!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,tₘ,a.g,a.uBC,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
-    updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
-    update!(b)
+    # L = μ₀/ρ_face refreshed once per step from the volume fraction, via
+    # WaterLily's core hook (1/ρ computed on the fly — no stored ρ array).
+    density_coefficient!(b, a.μ₀, let fρ=c.f⁰, λρ=c.λρ; (d,I)->inv(getρ(d,I,fρ,λρ)); end; perdir=a.perdir)
     myproject!(a,b,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
 
     # copyto!(c.f, c.f⁰)
@@ -99,8 +100,7 @@ end
     viscSurfTenρu!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC); BC!(a.u,a.uBC,a.exitBC,a.perdir)
-    updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
-    update!(b)
+    density_coefficient!(b, a.μ₀, let fρ=c.f, λρ=c.λρ; (d,I)->inv(getρ(d,I,fρ,λρ)); end; perdir=a.perdir)
     myproject!(a,b); BC!(a.u,a.uBC,a.exitBC,a.perdir)
 
     push!(a.Δt,min(MPCFL(a,c),1.2δt))
