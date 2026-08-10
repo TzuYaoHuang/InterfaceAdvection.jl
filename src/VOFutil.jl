@@ -183,8 +183,13 @@ Specify at `IJEQUAL` with `Val{i==j}()`.
 The calculated viscosity is limited with the majority fluid's kinematic viscosity applied to interpolation.
 The dynamic viscosity is then recovered using the minimal density of the cells who are going to use the stress flux.
 """
-@inline @fastmath getμCell(i,j,I,f,λμ,μ,λρ) = μ*linInterpProp(f[I-δ(i,I)],λμ)
-@inline @fastmath function getμEdge(i,j,I,f::AbstractArray{T,D},λμ,μ,λρ) where {T,D}
+@inline @fastmath function getμCell(i,j,I,f,fFace,λμ,μ,λρ)
+    f1,f2 = fFace[I-δ(i,I),i],fFace[I,i]
+    s = f1+f2
+    fmin = λρ < 1 ? min(f1,f2) : max(f1,f2)
+    return μ*min(linInterpProp(s,λμ), ifelse(s>0.5,1,λμ/λρ)*linInterpProp(fmin,λρ))
+end
+@inline @fastmath function getμEdge(i,j,I,f::AbstractArray{T,D},fFace,λμ,μ,λρ) where {T,D}
     f1,f2,f3,f4 = f[I],f[I-δ(i,I)],f[I-δ(i,I)-δ(j,I)],f[I-δ(j,I)]
     s = (f1+f2+f3+f4)/4
     fmin = λρ < 1 ? min(f1+f2,f2+f3,f3+f4,f4+f1)/2 : max(f1+f2,f2+f3,f3+f4,f4+f1)/2
@@ -229,7 +234,7 @@ end
 
 function f2face!(fFace, fCen::AbstractArray{T,D}; perdir=()) where {T,D}
     for d∈1:D
-        @loop fFace[I,d] = ϕ(d,I,fCen) over I∈inside_uWB(size(fCen),d)
+        @loop fFace[I,d] = ϕ(d,I,fCen) over I∈inside(fCen)
     end
     BCv!(fFace;perdir)
 end

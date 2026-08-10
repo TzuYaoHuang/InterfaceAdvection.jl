@@ -110,12 +110,14 @@ end
 # This is the place for ρu forcing that does not need directional split
 function viscSurfTenρu!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     fill!(r,0)
-    visc!(r,u,ρuf,Φ,f,λμ,μ,λρ;perdir)
+    visc!(r,u,ρuf,n̂,Φ,f,λμ,μ,λρ;perdir)
     surfTen!(r,f,α,n̂,fbuffer,η;perdir)
 end
 
-function visc!(r,u,ρuf,Φ,f,λμ,μ::Number,λρ;perdir=())
+function visc!(r,u,ρuf,fFace,Φ,f,λμ,μ::Number,λρ;perdir=())
     N,D = size_u(u)
+
+    f2ρface!(fFace,f,λρ;perdir)
 
     # i is velocity direction (uᵢ)
     # j is face direction (differential) (∂ⱼ)
@@ -124,29 +126,29 @@ function visc!(r,u,ρuf,Φ,f,λμ,μ::Number,λρ;perdir=())
     for i∈1:D, j∈1:D
         tagper = (j∈perdir)
         # treatment for bottom boundary with BCs
-        lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
+        lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,Val{tagper}())
         # inner cells
-        @loop (Φ[I] = - viscF(i,j,I,u,f,λμ,μ,λρ);
+        @loop (Φ[I] = - viscF(i,j,I,u,f,fFace,λμ,μ,λρ);
                 r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
         @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
         # treatment for upper boundary with BCs
-        upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,Val{tagper}())
+        upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,Val{tagper}())
     end
 end
 visc!(r,u,ρuf,Φ,f,λμ,μ::Nothing,λρ;perdir=()) = nothing
 
 
 # Viscous forcing overload
-@inline viscF(i,j,I,u,f,λμ,μ,λρ) = (i==j ? getμCell(i,j,I,f,λμ,μ,λρ) : getμEdge(i,j,I,f,λμ,μ,λρ)) *(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
+@inline viscF(i,j,I,u,f,fFace,λμ,μ,λρ) = (i==j ? getμCell(i,j,I,f,fFace,λμ,μ,λρ) : getμEdge(i,j,I,f,fFace,λμ,μ,λρ)) *(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
 
 # Neumann BC Building block
-lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += - viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
-upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += viscF(i,j,I,u,f,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
+lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += - viscF(i,j,I,u,f,fFace,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
+upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += viscF(i,j,I,u,f,fFace,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
 
 # Periodic BC Building block
-lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop (
-    Φ[I] = -viscF(i,j,I,u,f,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
-upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
+lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,::Val{true}) = @loop (
+    Φ[I] = -viscF(i,j,I,u,f,fFace,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
+upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
 
