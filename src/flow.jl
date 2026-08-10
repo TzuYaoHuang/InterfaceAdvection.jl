@@ -117,7 +117,7 @@ end
 function visc!(r,u,ρuf,fFace,Φ,f,λμ,μ::Number,λρ;perdir=())
     N,D = size_u(u)
 
-    f2ρface!(fFace,f,λρ;perdir)
+    f2face!(fFace,f;perdir)
 
     # i is velocity direction (uᵢ)
     # j is face direction (differential) (∂ⱼ)
@@ -135,7 +135,7 @@ function visc!(r,u,ρuf,fFace,Φ,f,λμ,μ::Number,λρ;perdir=())
         upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,Val{tagper}())
     end
 end
-visc!(r,u,ρuf,Φ,f,λμ,μ::Nothing,λρ;perdir=()) = nothing
+visc!(r,u,ρuf,fFace,Φ,f,λμ,μ::Nothing,λρ;perdir=()) = nothing
 
 
 # Viscous forcing overload
