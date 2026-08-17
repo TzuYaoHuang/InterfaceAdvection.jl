@@ -11,7 +11,7 @@ import LinearAlgebra: ⋅, rmul!, axpy!
     α,β = c-u,d-c
     return c+max(α*β,0)*ifelse(α==β && α==0, 0, (α+β)/(α^2+β^2))/2
 end
-@fastmath Sweby(u,c,d,γ=1.5,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*max(0, min(s*γ*(c-u),s*(d-c)), min(s*(c-u),s*γ*(d-c)))/2
+@fastmath Sweby(u,c::T,d,γ=T(1.5),s=sign(d-u)) where T = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*max(0, min(s*γ*(c-u),s*(d-c)), min(s*(c-u),s*γ*(d-c)))/2
 @inline superbee(u,c,d) = Sweby(u,c,d,2)
 @fastmath TVDcen(u,c,d,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*min(s*(c-u),s*(d-c)/2)
 @fastmath TVDdown(u,c,d,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*min(s*(c-u),s*(d-c))
@@ -241,13 +241,14 @@ lowerBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{true}) = @loop (
 upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
-function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=1)
-    a = inv(w)-1
-    @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)*w over Ii∈CartesianIndices(ρu)
+function updateU!(u::AbstractArray{T},ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=one(T)) where T
+    wT = T(w)
+    a = inv(wT)-1
+    @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)*wT over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
     fill!(forcing,0)
     accelerate!(forcing,tNow,g,uBC)
-    axpy!(dt*w, forcing, u)
+    axpy!(dt*wT, forcing, u)
 end
 
 function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
@@ -325,7 +326,7 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
 end
 
 function myproject!(a::Flow{n,T},b::AbstractPoisson,w=1) where {n,T}
-    dt = w*last(a.Δt)
+    dt = T(w)*last(a.Δt)
     inproject!(a,b,dt)
     for i ∈ 1:n  # apply solution and unscale to recover pressure
         @loop a.u[I,i] -= b.L[I,i]*∂(i,I,b.x) over I ∈ inside(b.x)

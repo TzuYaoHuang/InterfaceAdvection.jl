@@ -43,7 +43,7 @@ function getInterfaceNormal_WY!(f::AbstractArray{T,D},n̂,I) where {T,D}
     for d∈1:D
         if d==dominantDir
             sgn = sign(n̂[I,d])
-            n̂[I,d] = ifelse(sgn==0,1,sgn)
+            n̂[I,d] = ifelse(sgn==0,one(T),sgn)
             continue
         end
 
@@ -83,7 +83,7 @@ function getInterfaceNormal_Column!(f::AbstractArray{T,D},n̂,I) where {T,D}
     for d∈1:D
         if d==dominantDir
             sgn = sign(n̂[I,d])
-            n̂[I,d] = ifelse(sgn==0,1,sgn)
+            n̂[I,d] = ifelse(sgn==0,one(T),sgn)
             continue
         end
 
@@ -212,7 +212,7 @@ function getInterfaceNormal_CCi(f::AbstractArray{T,n},n̂,I,dc) where {T,n}
     nhat = ntuple(
         d -> if (d == dc)
             sgn = sign(n̂[I,d])
-            ifelse(sgn==0,1,sgn)
+            ifelse(sgn==0,one(T),sgn)
         else
             hu = get3CellHeight(f, I+δ(d,I), dc)
             hd = get3CellHeight(f, I-δ(d,I), dc)
@@ -231,7 +231,7 @@ Calculate the interface normal from [Youngs (1982)](https://www.researchgate.net
 Note that `nhat` is view of `n̂[I,:]`.
 """
 function getInterfaceNormal_Y!(f::AbstractArray{T,D},n̂,I) where {T,D}
-    a = 0
+    a = zero(T)
     for d ∈ 1:D
         n̂[I,d] = (YoungSum(f,I-δ(d,I),d) - YoungSum(f,I+δ(d,I),d))*0.5
         a += abs(n̂[I,d])
@@ -246,9 +246,9 @@ function getInterfaceNormal_Y!(f::AbstractArray{T,D},n̂,I) where {T,D}
         end
     end
 end
-function YoungSum(f,I,d)
+function YoungSum(f::AbstractArray{T},I,d) where T
     δxy = oneunit(I)-δ(d,I)
-    a = 0
+    a = zero(T)
     for II∈I-δxy:I
         for III∈II:II+δxy
             a+=f[III]
@@ -275,7 +275,7 @@ function crossSummation(f::AbstractArray{T,n},I,d,γ=1.0) where {T,n}
     #     a += f[I-δ(iDir,I)]+f[I+δ(iDir,I)]
     # end
     for iDir∈1:n
-        a += iDir≠d ? γ*(f[I-δ(iDir,I)]+f[I+δ(iDir,I)]) : 0
+        a += iDir≠d ? T(γ)*(f[I-δ(iDir,I)]+f[I+δ(iDir,I)]) : 0
     end
     return a
 end
