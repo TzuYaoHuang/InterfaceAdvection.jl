@@ -62,12 +62,13 @@ mutable struct TwoPhaseSimulation <: AbstractSimulation
 
         # generate base simulation
         sim = Simulation(dims,args...; T, mem, kwargs...)
+        flow = sim.flow
 
         # multipahse part
-        intf = cVOF(dims;mem,T,InterfaceSDF,μ=sim.flow.ν,λμ,λρ,η,perdir=sim.flow.perdir)
+        intf = cVOF(dims;mem,T,InterfaceSDF,μ=flow.ν,λμ,λρ,η,perdir=flow.perdir)
 
         # correct wrong CFL
-        sim.flow.Δt[end] .= min(last(flow.Δt),MPCFL(flow,intf))
+        flow.Δt[end] = min(last(flow.Δt),MPCFL(flow,intf))
 
         new(sim,intf)
     end
