@@ -61,7 +61,7 @@ mutable struct TwoPhaseSimulation <: AbstractSimulation
                         kwargs...) where N 
 
         # generate base simulation
-        sim = Simulation(dims,args...; perdir, T, mem, kwargs...)
+        sim = Simulation(dims,args...; T, mem, kwargs...)
 
         # multipahse part
         intf = cVOF(dims;mem,T,InterfaceSDF,μ=sim.flow.ν,λμ,λρ,η,perdir=sim.flow.perdir)
