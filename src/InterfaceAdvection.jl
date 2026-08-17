@@ -32,66 +32,48 @@ include("metrics.jl")
 
 """
     TwoPhaseSimulation(dims::NTuple{N}, u_BC, L::Number;
-                        Δt=0.25, ν=0., g=nothing, U=nothing, ϵ=1, perdir=(),
-                        λμ=1e-2,λρ=1e-3,η=0,
+                        λμ=1e-2, λρ=1e-3, η=0,
                         InterfaceSDF::Function=(x) -> -5-x[1],
-                        uλ=nothing, exitBC=false, body::AbstractBody=NoBody(),
-                        T=Float32, mem=Array)
+                        T=Float32, mem=Array, kwargs...)
 
-Constructor for a WaterLily.jl two phase simulation, which is identical to the original on with some additional properties for multiphase flow:
+Constructor for a two-phase flow simulation based on WaterLily.jl.
+Wraps a `WaterLily.Simulation` together with a `cVOF` interface field, and accepts
+all of `WaterLily.Simulation`'s keyword arguments (e.g. `Δt`, `ν`, `g`, `U`, `ϵ`,
+`perdir`, `exitBC`, `body`) plus the following for multiphase flow:
 
-    - `dims`: Simulation domain dimensions.
-    - `u_BC`: Simulation domain velocity boundary conditions, either a
-                tuple `u_BC[i]=uᵢ, i=eachindex(dims)`, or a time-varying function `f(i,t)`
-    - `L`: Simulation length scale.
-    - `U`: Simulation velocity scale.
-    - `Δt`: Initial time step.
-    - `ν`: Scaled kinemetic viscosity (`Re=UL/ν`).
-    - `g`: Domain acceleration, `g(i,x,t)=duᵢ/dt`
-    - `ϵ`: BDIM kernel width.
-    - `perdir`: Domain periodic boundary condition in the `(i,)` direction.
-    - `exitBC`: Convective exit boundary condition in the `i=1` direction.
-    - `uλ`: Function to generate the initial velocity field.
-    - `λμ`: Ratio of dynamic viscosity, light/dark
-    - `λρ`: Ratio of density, light/dark
-    - `η`: Surface surfaceTension
-    - `InterfaceSDF`: Signed distance function for interface, where dark fluid is indicated by the negative distance.
-    - `body`: Immersed geometry.
-    - `T`: Array element type.
-    - `mem`: memory location. `Array`, `CuArray`, `ROCm` to run on CPU, NVIDIA, or AMD devices, respectively.
+- `λμ`: ratio of dynamic viscosity, light/dark.
+- `λρ`: ratio of density, light/dark.
+- `η`: surface tension coefficient.
+- `InterfaceSDF`: signed distance function for the interface, where the dark
+  fluid occupies the region of negative distance, e.g. `sdf(x) = 5-x[1]`
+- `T`: array element type.
+- `mem`: memory location. `Array`, `CuArray`, `ROCm` to run on CPU, NVIDIA, or
+  AMD devices, respectively.
 
-See files in `examples` folder for examples.
+See: `WaterLily.Simulation`.
 """
 mutable struct TwoPhaseSimulation <: AbstractSimulation
-    U :: Number # velocity scale
-    L :: Number # length scale
-    ϵ :: Number # kernel width
-    flow :: Flow
-    body :: AbstractBody
-    pois :: AbstractPoisson
+    sim :: Simulation
     intf :: cVOF
-    function TwoPhaseSimulation(dims::NTuple{N}, uBC, L::Number;
-                        Δt=0.25, ν=0., g=nothing, U=nothing, ϵ=1, perdir=(),
-                        λμ=1e-2,λρ=1e-3,η=0,
-                        InterfaceSDF::Function=(x) -> -5-x[1],
-                        uλ=nothing, exitBC=false, body::AbstractBody=NoBody(),
-                        T=Float32, mem=Array) where N 
-        # same as waterlily
-        @assert !(isnothing(U) && isa(uBC,Function)) "`U` (velocity scale) must be specified if boundary conditions `uBC` is a `Function`"
-        isnothing(U) && (U = √sum(abs2,uBC))
-        check_fn(uBC,N,T,3); check_fn(g,N,T,3); check_fn(uλ,N,T,2)
-        flow = Flow(dims,uBC;uλ,Δt,ν,g,T,mem,perdir,exitBC)
-        measure!(flow,body;ϵ)
+    function TwoPhaseSimulation(dims::NTuple{N}, args...;
+                        T=Float32, mem=Array,
+                        λμ=1e-2, λρ=1e-3, η=nothing, InterfaceSDF=nothing,
+                        kwargs...) where N 
+
+        # generate base simulation
+        sim = Simulation(dims,args...; ν, perdir, T, mem, kwargs...)
 
         # multipahse part
-        intf = cVOF(dims;mem,T,InterfaceSDF,μ=ν,λμ,λρ,η,perdir)
+        intf = cVOF(dims;mem,T,InterfaceSDF,μ=sim.flow.ν,λμ,λρ,η,perdir=sim.flow.perdir)
 
         # correct wrong CFL
-        flow.Δt .= min(last(flow.Δt),MPCFL(flow,intf))
+        sim.flow.Δt[end] .= min(last(flow.Δt),MPCFL(flow,intf))
 
-        new(U,L,ϵ,flow,body,MultiLevelPoisson(flow.p,flow.μ₀,flow.σ;perdir),intf)
+        new(sim,intf)
     end
 end
+Base.getproperty(f::TwoPhaseSimulation, s::Symbol) = s in propertynames(f) ? getfield(f, s) : getfield(f.sim, s)
+Base.setproperty!(f::TwoPhaseSimulation, s::Symbol, x) = s in propertynames(f) ? setproperty!(f,s,x) : setproperty!(f.sim,s,x)
 
 export TwoPhaseSimulation
 

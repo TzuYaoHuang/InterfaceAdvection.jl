@@ -5,6 +5,7 @@ using StaticArrays
 
 Calculate volume fraction, `f`, according to a given signed distance function, `InterfaceSDF`. The dark fluid is indicated with negative distance.
 """
+applyVOF!(f,α,n̂,InterfaceSDF::Nothing) = nothing
 function applyVOF!(f,α,n̂,InterfaceSDF)
     # set up the field with PLIC Calculation
     @loop applyVOF!(f,α,n̂,InterfaceSDF,I) over I∈inside(f)
