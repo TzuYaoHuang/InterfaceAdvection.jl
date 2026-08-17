@@ -1,4 +1,4 @@
-import WaterLily: accelerate!, median, update!, project!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ
+import WaterLily: accelerate!, median, update!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ, udf!
 import LinearAlgebra: ⋅, rmul!, axpy!
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
@@ -11,7 +11,7 @@ import LinearAlgebra: ⋅, rmul!, axpy!
     α,β = c-u,d-c
     return c+max(α*β,0)*ifelse(α==β && α==0, 0, (α+β)/(α^2+β^2))/2
 end
-@fastmath Sweby(u,c,d,γ=1.5,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*max(0, min(s*γ*(c-u),s*(d-c)), min(s*(c-u),s*γ*(d-c)))/2
+@fastmath Sweby(u,c::T,d,γ=T(1.5),s=sign(d-u)) where T = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*max(0, min(s*γ*(c-u),s*(d-c)), min(s*(c-u),s*γ*(d-c)))/2
 @inline superbee(u,c,d) = Sweby(u,c,d,2)
 @fastmath TVDcen(u,c,d,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*min(s*(c-u),s*(d-c)/2)
 @fastmath TVDdown(u,c,d,s=sign(d-u)) = (c≤min(u,d) || c≥max(u,d)) ? c : c + s*min(s*(c-u),s*(d-c))
@@ -60,7 +60,7 @@ function ϕq(j,i,Ii,fOld::AbstractArray{T,Dv},ρuf,u,uu,cc,dd,δt,λρ,λ) where
 end
 
 
-@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = last(a.Δt)) where {D,T}
+@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = last(a.Δt), udf=nothing, kwargs...) where {D,T}
     copyto!(a.u⁰, a.u); copyto!(c.f⁰, c.f)
     t₁ = sum(a.Δt); t₀ = t₁-δt; tₘ = t₁-δt/2
     # TODO: check if BC doable for ρu
@@ -76,6 +76,7 @@ end
     fill!(a.μ₀,1)
     @. c.f⁰ = (c.f⁰+c.f)/2
     viscSurfTenρu!(a.f,a.u,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
+    udf!(a,udf,a.u⁰,t₀;kwargs...) # advect with u⁰, in sync with WaterLily's mom_predict!
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,tₘ,a.g,a.uBC,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
@@ -96,7 +97,8 @@ end
     fill!(a.μ₀,1)
     # TODO: viscous term and surface tension term should be evaluated 
     # at the end of time step to avoid divide by wrong ρ
-    viscSurfTenρu!(a.f,a.u,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
+    viscSurfTenρu!(a.f,a.u,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
+    udf!(a,udf,a.u,t₁;kwargs...) # advect with projected u, in sync with WaterLily's mom_correct!
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
@@ -239,13 +241,14 @@ lowerBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{true}) = @loop (
 upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
-function updateU!(u,ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=1)
-    a = inv(w)-1
-    @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)*w over Ii∈CartesianIndices(ρu)
+function updateU!(u::AbstractArray{T},ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=one(T)) where T
+    wT = T(w)
+    a = inv(wT)-1
+    @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)*wT over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
     fill!(forcing,0)
     accelerate!(forcing,tNow,g,uBC)
-    axpy!(dt*w, forcing, u)
+    axpy!(dt*wT, forcing, u)
 end
 
 function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
@@ -323,7 +326,7 @@ function psolver!(p::Poisson{T};log=false,tol=50eps(T),itmx=6e3) where T
 end
 
 function myproject!(a::Flow{n,T},b::AbstractPoisson,w=1) where {n,T}
-    dt = w*last(a.Δt)
+    dt = T(w)*last(a.Δt)
     inproject!(a,b,dt)
     for i ∈ 1:n  # apply solution and unscale to recover pressure
         @loop a.u[I,i] -= b.L[I,i]*∂(i,I,b.x) over I ∈ inside(b.x)

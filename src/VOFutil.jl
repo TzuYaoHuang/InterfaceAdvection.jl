@@ -5,6 +5,7 @@ using StaticArrays
 
 Calculate volume fraction, `f`, according to a given signed distance function, `InterfaceSDF`. The dark fluid is indicated with negative distance.
 """
+applyVOF!(f,α,n̂,InterfaceSDF::Nothing) = nothing
 function applyVOF!(f,α,n̂,InterfaceSDF)
     # set up the field with PLIC Calculation
     @loop applyVOF!(f,α,n̂,InterfaceSDF,I) over I∈inside(f)
@@ -182,11 +183,11 @@ The function return the linear interpolation at cell center (when `i==j`) or cel
 The calculated viscosity is limited with the majority fluid's kinematic viscosity applied to interpolation.
 The dynamic viscosity is then recovered using the minimal density of the cells who are going to use the stress flux.
 """
-@inline @fastmath function getμ(i,j,I,fFace,λμ,μ,λρ)
+@inline @fastmath function getμ(i,j,I,fFace::AbstractArray{T},λμ,μ,λρ) where T
     f1,f2,f3,f4 = fFace[I-δ(j,I),i],fFace[I,i],fFace[I-δ(i,I),j],fFace[I,j]
     s = (f1+f2+f3+f4)/4
     f_ρmin = λρ < 1 ? min(f1,f2,f3,f4) : max(f1,f2,f3,f4)
-    return μ*min(linInterpProp(s,λμ), ifelse(s>0.5,1,λμ/λρ)*linInterpProp(f_ρmin,λρ))
+    return μ*min(linInterpProp(s,λμ), ifelse(s>0.5,one(T),λμ/λρ)*linInterpProp(f_ρmin,λρ))
 end
 
 """

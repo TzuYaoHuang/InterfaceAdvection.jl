@@ -12,7 +12,7 @@ The dark fluid is indicated with negative distance. That is to say, the normal i
 """
 struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
 
-    # field variable
+    # field variables
     f  :: Sf  # volume fraction
     f⁰ :: Sf  # volume fraction for RK2 scheme
     α  :: Sf  # intercept for PLIC
@@ -20,11 +20,11 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
     fᶠ :: Sf  # store VOF flux
     c̄  :: AbstractArray{Int8} # cell-centered indicator value for dilation term
 
-    # Varable for energy-conserving scheme
+    # Varables for CMOM
     ρu :: Vf  # momentum
     ρuf:: Vf  # mass flux from VOF advection
 
-    # Interface-aware Flux limiter
+    # Originally for interface-aware Flux limiter but now a vector buffer
     dρ :: Vf # face-center density change indicator
 
     # physical properties
@@ -36,12 +36,11 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
     # domain configuration
     perdir :: NTuple  # tuple of periodic direction
 
-    function cVOF(
-        N::NTuple{D}; 
-        mem=Array, T=Float32, 
-        InterfaceSDF::Function=(x)->5-x[1], 
-        μ=1e-3, λμ=1e-2, λρ=1e-3, η=nothing,
-        perdir=()
+    function cVOF(N::NTuple{D}; 
+                mem=Array, T=Float32, 
+                InterfaceSDF=nothing, 
+                μ=1e-3, λμ=1e-2, λρ=1e-3, η=nothing,
+                perdir=()
     ) where D
 
         # Declare grid size
@@ -55,16 +54,16 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}}
         c̄ = zeros(Int8,Ng) |> mem
 
         # Initialize variables
-        applyVOF!(f,α,n̂,InterfaceSDF)
-        BCVOF!(f,α,n̂;perdir)
+        applyVOF!(f,α,n̂,InterfaceSDF); !isnothing(InterfaceSDF) && BCf!(f;perdir)
         f⁰ = copy(f) |> mem
         fᶠ = zeros(T,Ng) |> mem
 
-        # Energy conserving
+        # CMOM
         ρu = zeros(T,Nv) |> mem
         ρuf= zeros(T,Nv) |> mem
 
-        # Interface-aware Flux limiter
+        # Yet another vecotr variable for starage purpose
+        # originally for density ratio
         dρ = ones(T,Nv) |> mem
 
         # correct η
