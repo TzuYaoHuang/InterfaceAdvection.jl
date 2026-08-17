@@ -175,25 +175,18 @@ Linearly interpolate density at either `I` or `I-0.5d`.
 @inline @fastmath getρ(d,I,f,λρ) = linInterpProp(ϕ(d,I,f),λρ)
 
 """
-    getμ(i,j,I,f,λμ,μ,λρ)
+    getμ(i,j,I,fFace,λμ,μ,λρ)
 
 Calculate the viscosity corresponding to the term ∂ⱼuᵢ @ either `I-0.5i-0.5j` or `I-1i`.
 The function return the linear interpolation at cell center (when `i==j`) or cell vertex (when `i≠j`).
-Specify at `IJEQUAL` with `Val{i==j}()`.
 The calculated viscosity is limited with the majority fluid's kinematic viscosity applied to interpolation.
 The dynamic viscosity is then recovered using the minimal density of the cells who are going to use the stress flux.
 """
-@inline @fastmath function getμCell(i,j,I,f,fFace,λμ,μ,λρ)
-    f1,f2 = fFace[I-δ(i,I),i],fFace[I,i]
-    s = f1+f2
-    fmin = λρ < 1 ? min(f1,f2) : max(f1,f2)
-    return μ*min(linInterpProp(s,λμ), ifelse(s>0.5,1,λμ/λρ)*linInterpProp(fmin,λρ))
-end
-@inline @fastmath function getμEdge(i,j,I,f::AbstractArray{T,D},fFace,λμ,μ,λρ) where {T,D}
-    f1,f2,f3,f4 = f[I],f[I-δ(i,I)],f[I-δ(i,I)-δ(j,I)],f[I-δ(j,I)]
+@inline @fastmath function getμ(i,j,I,fFace,λμ,μ,λρ)
+    f1,f2,f3,f4 = fFace[I-δ(j,I),i],fFace[I,i],fFace[I-δ(i,I),j],fFace[I,j]
     s = (f1+f2+f3+f4)/4
-    fmin = λρ < 1 ? min(f1+f2,f2+f3,f3+f4,f4+f1)/2 : max(f1+f2,f2+f3,f3+f4,f4+f1)/2
-    return μ*min(linInterpProp(s,λμ), ifelse(s>0.5,1,λμ/λρ)*linInterpProp(fmin,λρ))
+    f_ρmin = λρ < 1 ? min(f1,f2,f3,f4) : max(f1,f2,f3,f4)
+    return μ*min(linInterpProp(s,λμ), ifelse(s>0.5,1,λμ/λρ)*linInterpProp(f_ρmin,λρ))
 end
 
 """

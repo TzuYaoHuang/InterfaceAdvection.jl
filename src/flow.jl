@@ -75,7 +75,7 @@ end
     # TODO: include measure
     fill!(a.μ₀,1)
     @. c.f⁰ = (c.f⁰+c.f)/2
-    viscSurfTenρu!(a.f,a.u,c.ρuf,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
+    viscSurfTenρu!(a.f,a.u,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,tₘ,a.g,a.uBC,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
@@ -96,7 +96,7 @@ end
     fill!(a.μ₀,1)
     # TODO: viscous term and surface tension term should be evaluated 
     # at the end of time step to avoid divide by wrong ρ
-    viscSurfTenρu!(a.f,a.u,c.ρuf,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
+    viscSurfTenρu!(a.f,a.u,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
@@ -108,13 +108,13 @@ end
 
 # Forcing with the unit of ρu instead of u
 # This is the place for ρu forcing that does not need directional split
-function viscSurfTenρu!(r,u,ρuf,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
+function viscSurfTenρu!(r,u,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     fill!(r,0)
-    visc!(r,u,ρuf,n̂,Φ,f,λμ,μ,λρ;perdir)
+    visc!(r,u,n̂,Φ,f,λμ,μ,λρ;perdir)
     surfTen!(r,f,α,n̂,fbuffer,η;perdir)
 end
 
-function visc!(r,u,ρuf,fFace,Φ,f,λμ,μ::Number,λρ;perdir=())
+function visc!(r,u,fFace,Φ,f,λμ,μ::Number,λρ;perdir=())
     N,D = size_u(u)
 
     f2face!(fFace,f;perdir)
@@ -126,29 +126,29 @@ function visc!(r,u,ρuf,fFace,Φ,f,λμ,μ::Number,λρ;perdir=())
     for i∈1:D, j∈1:D
         tagper = (j∈perdir)
         # treatment for bottom boundary with BCs
-        lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,Val{tagper}())
+        lowerBoundaryVisc!(r,u,Φ,i,j,N,fFace,λμ,μ,λρ,Val{tagper}())
         # inner cells
-        @loop (Φ[I] = - viscF(i,j,I,u,f,fFace,λμ,μ,λρ);
+        @loop (Φ[I] = - viscF(i,j,I,u,fFace,λμ,μ,λρ);
                 r[I,i] += Φ[I]) over I ∈ inside_u(N,j)
         @loop r[I-δ(j,I),i] -= Φ[I] over I ∈ inside_u(N,j)
         # treatment for upper boundary with BCs
-        upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,Val{tagper}())
+        upperBoundaryVisc!(r,u,Φ,i,j,N,fFace,λμ,μ,λρ,Val{tagper}())
     end
 end
-visc!(r,u,ρuf,fFace,Φ,f,λμ,μ::Nothing,λρ;perdir=()) = nothing
+visc!(r,u,fFace,Φ,f,λμ,μ::Nothing,λρ;perdir=()) = nothing
 
 
 # Viscous forcing overload
-@inline viscF(i,j,I,u,f,fFace,λμ,μ,λρ) = (i==j ? getμCell(i,j,I,f,fFace,λμ,μ,λρ) : getμEdge(i,j,I,f,fFace,λμ,μ,λρ)) *(∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
+@inline viscF(i,j,I,u,fFace,λμ,μ,λρ) = getμ(i,j,I,fFace,λμ,μ,λρ) * (∂(j,CI(I,i),u)+∂(i,CI(I,j),u))
 
 # Neumann BC Building block
-lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += - viscF(i,j,I,u,f,fFace,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
-upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += viscF(i,j,I,u,f,fFace,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
+lowerBoundaryVisc!(r,u,Φ,i,j,N,fFace,λμ,μ,λρ,::Val{false}) = @loop r[I,i] += - viscF(i,j,I,u,fFace,λμ,μ,λρ) over I ∈ slice(N,2,j,2)
+upperBoundaryVisc!(r,u,Φ,i,j,N,fFace,λμ,μ,λρ,::Val{false}) = @loop r[I-δ(j,I),i] += viscF(i,j,I,u,fFace,λμ,μ,λρ) over I ∈ slice(N,N[j],j,2)
 
 # Periodic BC Building block
-lowerBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,::Val{true}) = @loop (
-    Φ[I] = -viscF(i,j,I,u,f,fFace,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
-upperBoundaryVisc!(r,u,ρuf,Φ,i,j,N,f,fFace,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
+lowerBoundaryVisc!(r,u,Φ,i,j,N,fFace,λμ,μ,λρ,::Val{true}) = @loop (
+    Φ[I] = -viscF(i,j,I,u,fFace,λμ,μ,λρ); r[I,i] += Φ[I]) over I ∈ slice(N,2,j,2)
+upperBoundaryVisc!(r,u,Φ,i,j,N,fFace,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
 
