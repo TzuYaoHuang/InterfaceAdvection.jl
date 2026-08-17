@@ -80,26 +80,21 @@ export TwoPhaseSimulation
 
 # overload for simStep
 # solutoin from https://discourse.julialang.org/t/functions-from-different-modules-with-the-same-name/61505/2
-import WaterLily: sim_step!
+import WaterLily: sim_step!, sim_info
 # TODO: support BDIM body
-function sim_step!(sim::TwoPhaseSimulation,t_end;remeasure=false,max_steps=typemax(Int),verbose=false)
-    steps₀ = length(sim.flow.Δt)
-    while sim_time(sim) < t_end && length(sim.flow.Δt) - steps₀ < max_steps
-        sim_step!(sim; remeasure)
-        verbose && @printf("    tU/L=%10.6f, ΔtU/L=%.10f\n",sim_time(sim),last(sim.flow.Δt)*sim.U/sim.L);
-        flush(stdout)
-    end
-end
-function sim_step!(sim::TwoPhaseSimulation;remeasure=false)
+# `sim_step!(sim,t_end;...)` falls through to WaterLily's generic AbstractSimulation loop,
+# which drives this per-step method and `sim_info` below.
+function sim_step!(sim::TwoPhaseSimulation;remeasure=false,udf=nothing,kwargs...)
     remeasure && measure!(sim)
-    MPFMomStep!(sim.flow,sim.pois,sim.intf,sim.body)
+    MPFMomStep!(sim.flow,sim.pois,sim.intf,sim.body;udf,kwargs...)
 end
-
-export sim_step!
+function sim_info(sim::TwoPhaseSimulation)
+    @printf "    tU/L=%10.6f, ΔtU/L=%.10f\n" sim_time(sim) last(sim.flow.Δt)*sim.U/sim.L
+    flush(stdout)
+end
 
 import WaterLily: load!
 function load! end
-export load!
 
 # Backward compatibility for extensions
 if !isdefined(Base, :get_extension)

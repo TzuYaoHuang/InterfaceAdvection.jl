@@ -1,4 +1,4 @@
-import WaterLily: accelerate!, median, update!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ
+import WaterLily: accelerate!, median, update!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ, udf!
 import LinearAlgebra: ⋅, rmul!, axpy!
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
@@ -60,7 +60,7 @@ function ϕq(j,i,Ii,fOld::AbstractArray{T,Dv},ρuf,u,uu,cc,dd,δt,λρ,λ) where
 end
 
 
-@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = last(a.Δt)) where {D,T}
+@fastmath function MPFMomStep!(a::Flow{D,T}, b::AbstractPoisson, c::cVOF, d::AbstractBody;δt = last(a.Δt), udf=nothing, kwargs...) where {D,T}
     copyto!(a.u⁰, a.u); copyto!(c.f⁰, c.f)
     t₁ = sum(a.Δt); t₀ = t₁-δt; tₘ = t₁-δt/2
     # TODO: check if BC doable for ρu
@@ -76,6 +76,7 @@ end
     fill!(a.μ₀,1)
     @. c.f⁰ = (c.f⁰+c.f)/2
     viscSurfTenρu!(a.f,a.u,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
+    udf!(a,udf,a.u⁰,t₀;kwargs...) # advect with u⁰, in sync with WaterLily's mom_predict!
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,tₘ,a.g,a.uBC,dtCoeff); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
@@ -96,7 +97,8 @@ end
     fill!(a.μ₀,1)
     # TODO: viscous term and surface tension term should be evaluated 
     # at the end of time step to avoid divide by wrong ρ
-    viscSurfTenρu!(a.f,a.u,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir) 
+    viscSurfTenρu!(a.f,a.u,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
+    udf!(a,udf,a.u,t₁;kwargs...) # advect with projected u, in sync with WaterLily's mom_correct!
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC); BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
