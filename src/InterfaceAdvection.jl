@@ -25,7 +25,7 @@ include("surfaceTension.jl")
 export surfTen!,getCurvature,getPopinetHeight
 
 include("flow.jl")
-export MPFMomStep!
+export MPFMomStep!, upwind, minmod, Koren, vanAlbada1, Sweby, superbee
 
 include("metrics.jl")
 
@@ -34,6 +34,7 @@ include("metrics.jl")
     TwoPhaseSimulation(dims::NTuple{N}, u_BC, L::Number;
                         λμ=1e-2, λρ=1e-3, η=0,
                         InterfaceSDF::Function=(x) -> -5-x[1],
+                        λ=Koren,
                         T=Float32, mem=Array, kwargs...)
 
 Constructor for a two-phase flow simulation based on WaterLily.jl.
@@ -46,6 +47,11 @@ all of `WaterLily.Simulation`'s keyword arguments (e.g. `Δt`, `ν`, `g`, `U`, `
 - `η`: surface tension coefficient.
 - `InterfaceSDF`: signed distance function for the interface, where the dark
   fluid occupies the region of negative distance, e.g. `sdf(x) = 5-x[1]`
+- `λ`: momentum-flux interpolation scheme `λ(u,c,d)` (upstream, central, downstream)
+  used by `MPFMomStep!`'s mass-momentum consistent advection, e.g. `Koren` (default),
+  `minmod`, `vanAlbada1`, `superbee`, `upwind`, or `quick`.
+  Forwarded to `WaterLily.Simulation` and stored on `sim.flow.λ`, same as `WaterLily`'s own
+  convective scheme keyword. See `flow.jl`.
 - `T`: array element type.
 - `mem`: memory location. `Array`, `CuArray`, `ROCm` to run on CPU, NVIDIA, or
   AMD devices, respectively.
@@ -58,10 +64,11 @@ mutable struct TwoPhaseSimulation <: AbstractSimulation
     function TwoPhaseSimulation(dims::NTuple{N}, args...;
                         T=Float32, mem=Array,
                         λμ=1e-2, λρ=1e-3, η=nothing, InterfaceSDF=nothing,
-                        kwargs...) where N 
+                        λ=Koren,
+                        kwargs...) where N
 
         # generate base simulation
-        sim = Simulation(dims,args...; T, mem, kwargs...)
+        sim = Simulation(dims,args...; T, mem, λ, kwargs...)
         flow = sim.flow
 
         # multipahse part
