@@ -260,5 +260,30 @@ end
 end
 
 @testset "metrics.jl" begin
-    # TODO
+    import InterfaceAdvection: ρkeI, ρuI, ρgh, EnsI
+
+    u = zeros(4,4,2)
+    u[2,2,1] = 1; u[3,2,1] = 2; u[2,2,2] = 3; u[2,3,2] = 4
+    f = zeros(4,4); f[2,2] = 0.5
+    λρ = 0.2 # getρ(I,f,λρ) = λρ+(1-λρ)f[I] = 0.6 @ I
+    I = CartesianIndex(2,2)
+
+    @test ρkeI(I,u,f,λρ) ≈ 4.5
+    @test ρkeI(I,u,f,λρ,(1.,1.)) ≈ 2.1
+    @test ρuI(1,I,u,f,λρ) ≈ 0.9
+    @test ρuI(2,I,u,f,λρ) ≈ 2.1
+    @test ρuI(1,I,u,f,λρ,(1.,1.)) ≈ 0.3
+
+    @test ρgh(I,(0.,-1.),f,λρ,(0.,0.)) ≈ 0.3
+
+    ω = zeros(4,4); ω[2,2] = 1; ω[3,2] = 2; ω[2,3] = 3; ω[3,3] = 4
+    @test EnsI(I,ω) ≈ 3.75
+
+    # 3D EnsI exercises WaterLily.shiftDir to pick the two directions orthogonal to `i`
+    I3 = CartesianIndex(2,2,2)
+    ω3 = zeros(4,4,4,3)
+    ω3[2,2,2,1]=1; ω3[2,3,2,1]=2; ω3[2,2,3,1]=3; ω3[2,3,3,1]=4
+    ω3[2,2,2,2]=1; ω3[2,2,3,2]=2; ω3[3,2,2,2]=3; ω3[3,2,3,2]=4
+    ω3[2,2,2,3]=1; ω3[3,2,2,3]=2; ω3[2,3,2,3]=3; ω3[3,3,2,3]=4
+    @test EnsI(I3,ω3) ≈ 11.25
 end
