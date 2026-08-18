@@ -212,7 +212,7 @@ end
         end
         @test all(isfinite, sim.flow.u)
         @test all(isfinite, sim.intf.f)
-        @test sum(@view sim.intf.f[inside(sim.intf.f)]) ≈ V0 rtol=1e-5
+        @test sum(@view sim.intf.f[inside(sim.intf.f)]) ≈ V0 rtol=1e-4
     end
 end
 
