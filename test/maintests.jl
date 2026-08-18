@@ -61,8 +61,20 @@ end
     @test get3CellHeight(f,Ic,2) ≈ 0.96
     @test getρ(Ic,f,0.7) ≈ 0.796
     @test getρ(2,Ic,f,0.7) ≈ 0.748
-    @test getμCell(1,1,Iur,f,0.1,0.2,1) ≈ 0.1352
-    @test getμEdge(1,2,Iur,f,0.1,0.2,0.2) == getμEdge(2,1,Iur,f,0.1,0.2,0.2) ≈ 0.02
+
+    # getμ(i,j,I,fFace,λμ,μ,λρ) reads volume fraction interpolated to cell faces (fFace),
+    # not the cell-centered field directly (i==j -> cell-normal viscosity, i≠j -> edge/vertex viscosity)
+    fFace = zeros(3,3,2)
+    fFace[3,2,1] = 0.1; fFace[3,3,1] = 0.2; fFace[2,3,2] = 0.3; fFace[3,3,2] = 0.4
+    @test getμ(1,1,Iur,fFace,0.1,0.2,1) ≈ 0.02
+    @test getμ(1,2,Iur,fFace,0.1,0.2,0.2) == getμ(2,1,Iur,fFace,0.1,0.2,0.2) ≈ 0.028
+
+    # f2face! interpolates a cell-centered field to each of its D face directions
+    fCen = zeros(4,4); fCen[2:3,2:3] .= [0.2 0.6; 0.4 0.8]
+    fFace = zeros(4,4,2)
+    f2face!(fFace,fCen)
+    @test fFace[3,3,1] ≈ (fCen[2,3]+fCen[3,3])/2 ≈ 0.7
+    @test fFace[3,3,2] ≈ (fCen[3,2]+fCen[3,3])/2 ≈ 0.6
     # TODO: BCVOF!
 
     N = (2,2)
