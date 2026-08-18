@@ -51,7 +51,7 @@ end
 end
 
 @testset "VOFutil.jl" begin
-    import InterfaceAdvection: get3CellHeight,getρ,getμCell,getμEdge
+    import InterfaceAdvection: get3CellHeight,getρ,getμ,f2face!
     Ng = (3,3)
     Ic = CartesianIndex(2,2)
     Iur= CartesianIndex(Ng)
