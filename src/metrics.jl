@@ -1,4 +1,9 @@
-import WaterLily: fSV,fsum,shiftDir
+import WaterLily: fSV,fsum
+
+# NOTE: This should be removed once shiftdir is included
+# Not yet released by WaterLily (post-v1.8.0 only), so defined locally rather than imported.
+# Shift the index of direction `d` to `i` steps away in dimension space of `D`.
+shiftDir(d,D,i) = mod(d+i-1,D)+1
 
 """
     ρkeI(I::CartesianIndex,u,U=0)
