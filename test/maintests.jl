@@ -136,7 +136,23 @@ end
 end
 
 @testset "InterfaceAdvection.jl" begin
-    # Write your tests here.
+    for mem ∈ arrays
+        sim = TwoPhaseSimulation((8,8), (1.,0.), 8.; T=Float64, mem, InterfaceSDF=x->x[1]-4, perdir=(2,))
+        @test sim isa TwoPhaseSimulation
+        @test sim.intf isa InterfaceAdvection.cVOF
+        # getproperty falls through to the wrapped WaterLily.Simulation for non-own fields
+        @test sim.L == 8.
+        @test sim.U == 1.
+        @test sim.flow isa WaterLily.Flow
+        @test sim.body isa WaterLily.NoBody
+
+        # setproperty! must fall through the same way, and not recurse on `sim`'s own fields
+        sim.ϵ = 2.
+        @test sim.sim.ϵ == 2.
+        newintf = cVOF((8,8); T=Float64, mem)
+        sim.intf = newintf
+        @test sim.intf === newintf
+    end
 end
 
 @testset "metrics.jl" begin

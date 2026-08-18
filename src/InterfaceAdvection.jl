@@ -74,7 +74,7 @@ mutable struct TwoPhaseSimulation <: AbstractSimulation
     end
 end
 Base.getproperty(f::TwoPhaseSimulation, s::Symbol) = s in propertynames(f) ? getfield(f, s) : getfield(f.sim, s)
-Base.setproperty!(f::TwoPhaseSimulation, s::Symbol, x) = s in propertynames(f) ? setproperty!(f,s,x) : setproperty!(f.sim,s,x)
+Base.setproperty!(f::TwoPhaseSimulation, s::Symbol, x) = s in propertynames(f) ? setfield!(f,s,x) : setproperty!(f.sim,s,x)
 
 export TwoPhaseSimulation
 
