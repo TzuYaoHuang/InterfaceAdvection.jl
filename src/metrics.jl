@@ -1,4 +1,4 @@
-import WaterLily: fSV,fsum
+import WaterLily: fSV,fsum,shiftDir
 
 """
     ρkeI(I::CartesianIndex,u,U=0)
@@ -27,7 +27,7 @@ to subtract a background flow (by default, `U=0`).
 This function take multiphase into account so as the staggered arragement.
 """
 EnsI(I::CartesianIndex{3},ω) = 0.5*0.25fsum(3) do i
-    ix,iy = getAnotherDir(i,3)
+    ix,iy = shiftDir(i,3,1),shiftDir(i,3,2)
     ω[I,i]^2+ω[I+δ(ix,I),i]^2+ω[I+δ(iy,I),i]^2+ω[I+δ(ix,I)+δ(iy,I),i]^2
 end
 EnsI(I::CartesianIndex{2},ω) = 0.5*0.25*(
@@ -44,11 +44,3 @@ This function take multiphase into account so as the staggered arragement.
 ρuI(i,I::CartesianIndex{D},u,f,λρ,U=fSV(zero,D)) where D = begin
     0.5(u[I,i]+u[I+δ(i,I),i]-2U[i])*getρ(I,f,λρ)
 end
-
-
-"""
-    getAnotherDir(d,n)
-
-Given `1:n` directions, return tuple that exclude direction `d`.
-"""
-getAnotherDir(d,D) = filter(i-> i≠d,(1:D...,))
