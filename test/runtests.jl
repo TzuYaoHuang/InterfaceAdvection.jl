@@ -16,4 +16,5 @@ function setup_backends()
 end
 
 arrays = setup_backends()
+include("helper.jl")
 Threads.nthreads() > 1 ? include("maintests.jl") : include("alloctest.jl")

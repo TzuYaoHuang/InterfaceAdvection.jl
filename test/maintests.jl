@@ -51,7 +51,7 @@ end
 end
 
 @testset "VOFutil.jl" begin
-    import InterfaceAdvection: get3CellHeight,getρ,getμCell,getμEdge
+    import InterfaceAdvection: get3CellHeight,getρ,getμ,f2face!,BCf!,BCv!,BCv1D!
     Ng = (3,3)
     Ic = CartesianIndex(2,2)
     Iur= CartesianIndex(Ng)
@@ -61,9 +61,72 @@ end
     @test get3CellHeight(f,Ic,2) ≈ 0.96
     @test getρ(Ic,f,0.7) ≈ 0.796
     @test getρ(2,Ic,f,0.7) ≈ 0.748
-    @test getμCell(1,1,Iur,f,0.1,0.2,1) ≈ 0.1352
-    @test getμEdge(1,2,Iur,f,0.1,0.2,0.2) == getμEdge(2,1,Iur,f,0.1,0.2,0.2) ≈ 0.02
-    # TODO: BCVOF!
+
+    # getμ(i,j,I,fFace,λμ,μ,λρ) reads volume fraction interpolated to cell faces (fFace),
+    # not the cell-centered field directly (i==j -> cell-normal viscosity, i≠j -> edge/vertex viscosity)
+    fFace = zeros(3,3,2)
+    fFace[3,2,1] = 0.1; fFace[3,3,1] = 0.2; fFace[2,3,2] = 0.3; fFace[3,3,2] = 0.4
+    @test getμ(1,1,Iur,fFace,0.1,0.2,1) ≈ 0.02
+    @test getμ(1,2,Iur,fFace,0.1,0.2,0.2) == getμ(2,1,Iur,fFace,0.1,0.2,0.2) ≈ 0.028
+
+    # f2face! interpolates a cell-centered field to each of its D face directions
+    fCen = zeros(4,4); fCen[2:3,2:3] .= [0.2 0.6; 0.4 0.8]
+    fFace = zeros(4,4,2)
+    f2face!(fFace,fCen)
+    @test fFace[3,3,1] ≈ (fCen[2,3]+fCen[3,3])/2 ≈ 0.7
+    @test fFace[3,3,2] ≈ (fCen[3,2]+fCen[3,3])/2 ≈ 0.6
+
+    # --- Boundary conditions ---
+    # Neumann (perdir=()): ghost cells mirror their nearest interior neighbor.
+    # Periodic (j∈perdir): ghost cells wrap to the opposite side of the domain.
+    Ngbc = (6,6)
+    g = rand(Ngbc...)
+    gN = copy(g); BCf!(gN)
+    @test gN[1,:] == gN[2,:] && gN[end,:] == gN[end-1,:]
+    @test gN[:,1] == gN[:,2] && gN[:,end] == gN[:,end-1]
+    gP = copy(g); BCf!(gP;perdir=(1,2))
+    @test gP[1,:] == gP[end-1,:] && gP[end,:] == gP[2,:]
+    @test gP[:,1] == gP[:,end-1] && gP[:,end] == gP[:,2]
+
+    # BCf!(d,f;perdir): a d-face scalar. On the non-periodic dimension d itself, only the
+    # low boundary gets the special extrapolation f[I+2δ(d,I)]; the high boundary is left
+    # untouched (it is not a "ghost" for this staggered storage). Other non-periodic
+    # dimensions get plain Neumann; a periodic dimension still wraps, taking priority over
+    # the d-special rule.
+    g1 = copy(g); BCf!(1,g1)
+    @test g1[1,2:end-1] == g[3,2:end-1]
+    @test g1[end,2:end-1] == g[end,2:end-1]
+    @test g1[:,1] == g1[:,2] && g1[:,end] == g1[:,end-1]
+    g1p = copy(g); BCf!(1,g1p;perdir=(1,))
+    @test g1p[1,:] == g1p[end-1,:] && g1p[end,:] == g1p[2,:]
+
+    # BCv!/BCv1D!: a vector field gets the same d-special treatment component-by-component,
+    # each component's own direction being its "staggered/normal" direction.
+    u = rand(Ngbc...,2)
+    uN = copy(u); BCv!(uN)
+    @test uN[1,2:end-1,1] == u[3,2:end-1,1]
+    @test uN[end,2:end-1,1] == u[end,2:end-1,1]
+    @test uN[:,1,1] == uN[:,2,1] && uN[:,end,1] == uN[:,end-1,1]
+    @test uN[2:end-1,1,2] == u[2:end-1,3,2]
+    @test uN[2:end-1,end,2] == u[2:end-1,end,2]
+    @test uN[1,:,2] == uN[2,:,2] && uN[end,:,2] == uN[end-1,:,2]
+
+    u1 = copy(u); BCv1D!(view(u1,:,:,1),1) # single-component BC matches BCv!'s component 1
+    @test u1[:,:,1] == uN[:,:,1]
+
+    # BCVOF!: f follows BCf!'s convention in both branches, but α,n̂ are only extended on
+    # periodic dimensions -- their Neumann-side ghosts are left untouched by design.
+    f = rand(Ngbc...); α = rand(Ngbc...); n̂ = rand(Ngbc...,2)
+    α0, n0 = copy(α), copy(n̂)
+    BCVOF!(f,α,n̂)
+    @test f[1,:] == f[2,:] && f[end,:] == f[end-1,:]
+    @test α[1,:] == α0[1,:] && n̂[1,:,:] == n0[1,:,:]
+
+    f = rand(Ngbc...); α = rand(Ngbc...); n̂ = rand(Ngbc...,2)
+    BCVOF!(f,α,n̂;perdir=(1,2))
+    @test f[1,:] == f[end-1,:]
+    @test α[1,:] == α[end-1,:]
+    @test n̂[1,:,:] == n̂[end-1,:,:]
 
     N = (2,2)
     f = zeros(N.+2); α = similar(f); n̂ = zeros((N.+2 ...,2))
@@ -128,17 +191,101 @@ end
 end
 
 @testset "flow.jl" begin
-    # TODO
+    for mem ∈ arrays
+        # With zero velocity and no forcing (viscosity/gravity/surface tension all off by
+        # default), MPFMomStep! has nothing to advect: u and f must be exactly unchanged.
+        sim = quiescentDropletSim(8; mem)
+        f0 = copy(sim.intf.f)
+        sim_step!(sim)
+        @test all(iszero, sim.flow.u)
+        @test sim.intf.f == f0
+        @test all(isfinite, sim.flow.p)
+
+        # Under a genuinely divergence-free, rotational flow (TGV), the conservative VOF
+        # scheme should keep the dark-fluid volume constant to a tight tolerance.
+        sim = TGVDropletSim(16; mem)
+        # initialize the flow field
+        sim_step!(sim)
+        V0 = sum(@view sim.intf.f[inside(sim.intf.f)])
+        for _ in 1:3
+            sim_step!(sim)
+        end
+        @test all(isfinite, sim.flow.u)
+        @test all(isfinite, sim.intf.f)
+        @test sum(@view sim.intf.f[inside(sim.intf.f)]) ≈ V0 rtol=1e-4
+    end
 end
 
 @testset "cVOF.jl" begin
-    # TODO
+    for mem ∈ arrays
+        # Without an InterfaceSDF, the domain is entirely the dark fluid (f≡1)
+        intf = cVOF((4,4); T=Float64, mem)
+        @test all(==(1), intf.f)
+        @test all(==(0), intf.α)
+        @test all(==(0), intf.n̂)
+        @test intf.perdir == ()
+
+        # μ==0 / η==0 are sentinels for "disabled", stored as `nothing`
+        intf0 = cVOF((4,4); T=Float64, mem, μ=0., η=0.)
+        @test intf0.μ === nothing
+        @test intf0.η === nothing
+        intf1 = cVOF((4,4); T=Float64, mem, μ=0.5, λμ=0.2, λρ=0.3, η=1.5)
+        @test intf1.μ == 0.5 && intf1.λμ == 0.2 && intf1.λρ == 0.3 && intf1.η == 1.5
+
+        # An InterfaceSDF is PLIC-reconstructed into f (see the applyVOF! test above), then
+        # the ghost cells get a Neumann (zero-gradient) extension of the interior
+        interSDF = x -> (-x[1]-3x[2]+4.5)/√10
+        intf2 = cVOF((2,2); T=Float64, mem, InterfaceSDF=interSDF, perdir=())
+        fRef = [0 0 2/3 2/3; 0 0 2/3 2/3; 1/24 1/24 23/24 23/24; 1/24 1/24 23/24 23/24]
+        @test intf2.f ≈ fRef
+    end
 end
 
 @testset "InterfaceAdvection.jl" begin
-    # Write your tests here.
+    for mem ∈ arrays
+        sim = TwoPhaseSimulation((8,8), (1.,0.), 8.; T=Float64, mem, InterfaceSDF=x->x[1]-4, perdir=(2,))
+        @test sim isa TwoPhaseSimulation
+        @test sim.intf isa InterfaceAdvection.cVOF
+        # getproperty falls through to the wrapped WaterLily.Simulation for non-own fields
+        @test sim.L == 8.
+        @test sim.U == 1.
+        @test sim.flow isa WaterLily.Flow
+        @test sim.body isa WaterLily.NoBody
+
+        # setproperty! must fall through the same way, and not recurse on `sim`'s own fields
+        sim.ϵ = 2.
+        @test sim.sim.ϵ == 2.
+        newintf = cVOF((8,8); T=Float64, mem)
+        sim.intf = newintf
+        @test sim.intf === newintf
+    end
 end
 
 @testset "metrics.jl" begin
-    # TODO
+    import InterfaceAdvection: ρkeI, ρuI, ρgh, EnsI
+
+    u = zeros(4,4,2)
+    u[2,2,1] = 1; u[3,2,1] = 2; u[2,2,2] = 3; u[2,3,2] = 4
+    f = zeros(4,4); f[2,2] = 0.5
+    λρ = 0.2 # getρ(I,f,λρ) = λρ+(1-λρ)f[I] = 0.6 @ I
+    I = CartesianIndex(2,2)
+
+    @test ρkeI(I,u,f,λρ) ≈ 4.5
+    @test ρkeI(I,u,f,λρ,(1.,1.)) ≈ 2.1
+    @test ρuI(1,I,u,f,λρ) ≈ 0.9
+    @test ρuI(2,I,u,f,λρ) ≈ 2.1
+    @test ρuI(1,I,u,f,λρ,(1.,1.)) ≈ 0.3
+
+    @test ρgh(I,(0.,-1.),f,λρ,(0.,0.)) ≈ 0.3
+
+    ω = zeros(4,4); ω[2,2] = 1; ω[3,2] = 2; ω[2,3] = 3; ω[3,3] = 4
+    @test EnsI(I,ω) ≈ 3.75
+
+    # 3D EnsI exercises WaterLily.shiftDir to pick the two directions orthogonal to `i`
+    I3 = CartesianIndex(2,2,2)
+    ω3 = zeros(4,4,4,3)
+    ω3[2,2,2,1]=1; ω3[2,3,2,1]=2; ω3[2,2,3,1]=3; ω3[2,3,3,1]=4
+    ω3[2,2,2,2]=1; ω3[2,2,3,2]=2; ω3[3,2,2,2]=3; ω3[3,2,3,2]=4
+    ω3[2,2,2,3]=1; ω3[3,2,2,3]=2; ω3[2,3,2,3]=3; ω3[3,3,2,3]=4
+    @test EnsI(I3,ω3) ≈ 11.25
 end

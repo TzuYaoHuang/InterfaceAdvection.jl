@@ -271,9 +271,6 @@ function getInterfaceNormal_CD!(f::AbstractArray{T,n},n̂,I) where {T,n}
 end
 function crossSummation(f::AbstractArray{T,n},I,d,γ=1.0) where {T,n}
     a = f[I]
-    # for iDir∈getAnotherDir(d,n)
-    #     a += f[I-δ(iDir,I)]+f[I+δ(iDir,I)]
-    # end
     for iDir∈1:n
         a += iDir≠d ? T(γ)*(f[I-δ(iDir,I)]+f[I+δ(iDir,I)]) : 0
     end
