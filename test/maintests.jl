@@ -51,7 +51,7 @@ end
 end
 
 @testset "VOFutil.jl" begin
-    import InterfaceAdvection: get3CellHeight,getρ,getμ,f2face!
+    import InterfaceAdvection: get3CellHeight,getρ,getμ,f2face!,BCf!,BCv!,BCv1D!
     Ng = (3,3)
     Ic = CartesianIndex(2,2)
     Iur= CartesianIndex(Ng)
@@ -75,7 +75,58 @@ end
     f2face!(fFace,fCen)
     @test fFace[3,3,1] ≈ (fCen[2,3]+fCen[3,3])/2 ≈ 0.7
     @test fFace[3,3,2] ≈ (fCen[3,2]+fCen[3,3])/2 ≈ 0.6
-    # TODO: BCVOF!
+
+    # --- Boundary conditions ---
+    # Neumann (perdir=()): ghost cells mirror their nearest interior neighbor.
+    # Periodic (j∈perdir): ghost cells wrap to the opposite side of the domain.
+    Ngbc = (6,6)
+    g = rand(Ngbc...)
+    gN = copy(g); BCf!(gN)
+    @test gN[1,:] == gN[2,:] && gN[end,:] == gN[end-1,:]
+    @test gN[:,1] == gN[:,2] && gN[:,end] == gN[:,end-1]
+    gP = copy(g); BCf!(gP;perdir=(1,2))
+    @test gP[1,:] == gP[end-1,:] && gP[end,:] == gP[2,:]
+    @test gP[:,1] == gP[:,end-1] && gP[:,end] == gP[:,2]
+
+    # BCf!(d,f;perdir): a d-face scalar. On the non-periodic dimension d itself, only the
+    # low boundary gets the special extrapolation f[I+2δ(d,I)]; the high boundary is left
+    # untouched (it is not a "ghost" for this staggered storage). Other non-periodic
+    # dimensions get plain Neumann; a periodic dimension still wraps, taking priority over
+    # the d-special rule.
+    g1 = copy(g); BCf!(1,g1)
+    @test g1[1,2:end-1] == g[3,2:end-1]
+    @test g1[end,2:end-1] == g[end,2:end-1]
+    @test g1[:,1] == g1[:,2] && g1[:,end] == g1[:,end-1]
+    g1p = copy(g); BCf!(1,g1p;perdir=(1,))
+    @test g1p[1,:] == g1p[end-1,:] && g1p[end,:] == g1p[2,:]
+
+    # BCv!/BCv1D!: a vector field gets the same d-special treatment component-by-component,
+    # each component's own direction being its "staggered/normal" direction.
+    u = rand(Ngbc...,2)
+    uN = copy(u); BCv!(uN)
+    @test uN[1,2:end-1,1] == u[3,2:end-1,1]
+    @test uN[end,2:end-1,1] == u[end,2:end-1,1]
+    @test uN[:,1,1] == uN[:,2,1] && uN[:,end,1] == uN[:,end-1,1]
+    @test uN[2:end-1,1,2] == u[2:end-1,3,2]
+    @test uN[2:end-1,end,2] == u[2:end-1,end,2]
+    @test uN[1,:,2] == uN[2,:,2] && uN[end,:,2] == uN[end-1,:,2]
+
+    u1 = copy(u); BCv1D!(view(u1,:,:,1),1) # single-component BC matches BCv!'s component 1
+    @test u1[:,:,1] == uN[:,:,1]
+
+    # BCVOF!: f follows BCf!'s convention in both branches, but α,n̂ are only extended on
+    # periodic dimensions -- their Neumann-side ghosts are left untouched by design.
+    f = rand(Ngbc...); α = rand(Ngbc...); n̂ = rand(Ngbc...,2)
+    α0, n0 = copy(α), copy(n̂)
+    BCVOF!(f,α,n̂)
+    @test f[1,:] == f[2,:] && f[end,:] == f[end-1,:]
+    @test α[1,:] == α0[1,:] && n̂[1,:,:] == n0[1,:,:]
+
+    f = rand(Ngbc...); α = rand(Ngbc...); n̂ = rand(Ngbc...,2)
+    BCVOF!(f,α,n̂;perdir=(1,2))
+    @test f[1,:] == f[end-1,:]
+    @test α[1,:] == α[end-1,:]
+    @test n̂[1,:,:] == n̂[end-1,:,:]
 
     N = (2,2)
     f = zeros(N.+2); α = similar(f); n̂ = zeros((N.+2 ...,2))
