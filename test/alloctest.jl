@@ -13,7 +13,7 @@ backend != "SIMD" && throw(ArgumentError("KernelAbstractions backend not allowed
         κ = T(π/N)
         pertT = T(0.8)
 
-        function uλ(i,xyz)
+        function u0(i,xyz)
             x,y,z = @. (2xyz - N)*κ                # scaled coordinates
             i==1 && return -U*sin(x)*cos(y)*cos(z) # u_x
             i==2 && return  U*cos(x)*sin(y)*cos(z) # u_y
@@ -28,7 +28,7 @@ backend != "SIMD" && throw(ArgumentError("KernelAbstractions backend not allowed
 
         return TwoPhaseSimulation(
             NN, (0, 0, 0), R;
-            U, Δt=0.01, ν=ν, InterfaceSDF=Inter, T, uλ, perdir, η
+            U, Δt=0.01, ν=ν, InterfaceSDF=Inter, T, u0, perdir, η
         )
     end
 
