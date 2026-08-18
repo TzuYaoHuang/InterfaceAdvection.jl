@@ -191,11 +191,52 @@ end
 end
 
 @testset "flow.jl" begin
-    # TODO
+    for mem ∈ arrays
+        # With zero velocity and no forcing (viscosity/gravity/surface tension all off by
+        # default), MPFMomStep! has nothing to advect: u and f must be exactly unchanged.
+        sim = quiescentDropletSim(8; mem)
+        f0 = copy(sim.intf.f)
+        sim_step!(sim)
+        @test all(iszero, sim.flow.u)
+        @test sim.intf.f == f0
+        @test all(isfinite, sim.flow.p)
+
+        # Under a genuinely divergence-free, rotational flow (TGV), the conservative VOF
+        # scheme should keep the dark-fluid volume constant to a tight tolerance.
+        sim = TGVDropletSim(16; mem)
+        V0 = sum(@view sim.intf.f[inside(sim.intf.f)])
+        for _ in 1:3
+            sim_step!(sim)
+        end
+        @test all(isfinite, sim.flow.u)
+        @test all(isfinite, sim.intf.f)
+        @test sum(@view sim.intf.f[inside(sim.intf.f)]) ≈ V0 rtol=1e-5
+    end
 end
 
 @testset "cVOF.jl" begin
-    # TODO
+    for mem ∈ arrays
+        # Without an InterfaceSDF, the domain is entirely the dark fluid (f≡1)
+        intf = cVOF((4,4); T=Float64, mem)
+        @test all(==(1), intf.f)
+        @test all(==(0), intf.α)
+        @test all(==(0), intf.n̂)
+        @test intf.perdir == ()
+
+        # μ==0 / η==0 are sentinels for "disabled", stored as `nothing`
+        intf0 = cVOF((4,4); T=Float64, mem, μ=0., η=0.)
+        @test intf0.μ === nothing
+        @test intf0.η === nothing
+        intf1 = cVOF((4,4); T=Float64, mem, μ=0.5, λμ=0.2, λρ=0.3, η=1.5)
+        @test intf1.μ == 0.5 && intf1.λμ == 0.2 && intf1.λρ == 0.3 && intf1.η == 1.5
+
+        # An InterfaceSDF is PLIC-reconstructed into f (see the applyVOF! test above), then
+        # the ghost cells get a Neumann (zero-gradient) extension of the interior
+        interSDF = x -> (-x[1]-3x[2]+4.5)/√10
+        intf2 = cVOF((2,2); T=Float64, mem, InterfaceSDF=interSDF, perdir=())
+        fRef = [0 0 2/3 2/3; 0 0 2/3 2/3; 1/24 1/24 23/24 23/24; 1/24 1/24 23/24 23/24]
+        @test intf2.f ≈ fRef
+    end
 end
 
 @testset "InterfaceAdvection.jl" begin
