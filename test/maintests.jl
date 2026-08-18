@@ -204,6 +204,8 @@ end
         # Under a genuinely divergence-free, rotational flow (TGV), the conservative VOF
         # scheme should keep the dark-fluid volume constant to a tight tolerance.
         sim = TGVDropletSim(16; mem)
+        # initialize the flow field
+        sim_step!(sim)
         V0 = sum(@view sim.intf.f[inside(sim.intf.f)])
         for _ in 1:3
             sim_step!(sim)
