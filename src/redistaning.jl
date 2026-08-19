@@ -7,12 +7,15 @@ Not an actual signed-distance function until reinitialized with [`redistaning`](
 """
 struct LevelSet{D,T,Sf<:AbstractArray{T}}
     ϕ :: Sf
+    ϕ⁰:: Sf
     function LevelSet(sim::TwoPhaseSimulation)
         intf = sim.intf
         D,T,Sf = typeof(intf).parameters[1:3]
         ϕ = intf.f⁰
+        ϕ⁰= intf.α
         @. ϕ = 2intf.f-1
-        new{D,T,Sf}(ϕ)
+
+        new{D,T,Sf}(ϕ,ϕ⁰)
     end
 end
 
@@ -26,10 +29,13 @@ Reinitialize `ls.ϕ` into a signed-distance function by marching the pseudo-time
 to steady state, using forward-Euler pseudo-timestep `dτ` for a total pseudo-time `d`, effective the affected layer thickness.
 """
 function redistaning!(ls::LevelSet{D,T}; d=5, dτ=0.25, perdir=()) where {D,T}
-    ϕ = ls.ϕ
+    ϕ,ϕ⁰ = ls.ϕ,ls.ϕ⁰
     itmx = round(T,d/dτ)
     for _∈1:itmx
-        @inside ϕ[I] = ϕ[I]+T(dτ)*redistaning(I,ϕ)
+        ϕ⁰ .= ϕ
+        @inside ϕ[I] = ϕ[I] +T(dτ)*redistaning(I,ϕ)
+        BCf!(ϕ;perdir)
+        @inside ϕ[I] = ϕ⁰[I]+T(dτ)*(redistaning(I,ϕ)+redistaning(I,ϕ⁰))/2
         BCf!(ϕ;perdir)
     end
 end
