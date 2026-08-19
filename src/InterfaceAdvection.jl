@@ -29,6 +29,9 @@ export MPFMomStep!, upwind, minmod, Koren, vanAlbada1, Sweby, superbee
 
 include("metrics.jl")
 
+include("redistaning.jl")
+export LevelSet, redistaning
+
 
 """
     TwoPhaseSimulation(dims::NTuple{N}, u_BC, L::Number;
