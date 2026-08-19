@@ -65,14 +65,14 @@ See: `WaterLily.Simulation`.
 mutable struct TwoPhaseSimulation <: AbstractSimulation
     sim :: Simulation
     intf :: cVOF
-    function TwoPhaseSimulation(dims::NTuple{N}, args...;
+    function TwoPhaseSimulation(dims::NTuple{N}, u_BC, L::Number;
                         T=Float32, mem=Array,
                         λμ=1e-2, λρ=1e-3, η=nothing, InterfaceSDF=nothing,
                         λ=Koren, normalScheme=getInterfaceNormal_WH!,
                         kwargs...) where N
 
         # generate base simulation
-        sim = Simulation(dims,args...; T, mem, λ, kwargs...)
+        sim = Simulation(dims, u_BC, L; T, mem, λ, kwargs...)
         flow = sim.flow
 
         # multipahse part
