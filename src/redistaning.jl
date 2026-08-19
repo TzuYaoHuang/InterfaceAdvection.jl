@@ -25,13 +25,13 @@ Reinitialize `ls.ϕ` into a signed-distance function by marching the pseudo-time
 
 to steady state, using forward-Euler pseudo-timestep `dτ` for a total pseudo-time `d`, effective the affected layer thickness.
 """
-function redistaning(ls::LevelSet{D,T}; d=5, dτ=0.25, perdir=()) where {D,T}
+function redistaning!(ls::LevelSet{D,T}; d=5, dτ=0.25, perdir=()) where {D,T}
     ϕ = ls.ϕ
     itmx = round(T,d/dτ)
     for _∈1:itmx
         @inside ϕ[I] = ϕ[I]+T(dτ)*redistaning(I,ϕ)
+        BCf!(ϕ;perdir)
     end
-    BCf!(ϕ;perdir)
 end
 
 """

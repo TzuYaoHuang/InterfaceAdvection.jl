@@ -29,10 +29,6 @@ export MPFMomStep!, upwind, minmod, Koren, vanAlbada1, Sweby, superbee
 
 include("metrics.jl")
 
-include("redistaning.jl")
-export LevelSet, redistaning
-
-
 """
     TwoPhaseSimulation(dims::NTuple{N}, u_BC, L::Number;
                         λμ=1e-2, λρ=1e-3, η=0,
@@ -91,6 +87,9 @@ Base.getproperty(f::TwoPhaseSimulation, s::Symbol) = s in propertynames(f) ? get
 Base.setproperty!(f::TwoPhaseSimulation, s::Symbol, x) = s in propertynames(f) ? setfield!(f,s,x) : setproperty!(f.sim,s,x)
 
 export TwoPhaseSimulation
+
+include("redistaning.jl")
+export LevelSet, redistaning!
 
 # overload for simStep
 # solutoin from https://discourse.julialang.org/t/functions-from-different-modules-with-the-same-name/61505/2
