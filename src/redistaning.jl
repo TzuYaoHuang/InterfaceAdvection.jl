@@ -19,6 +19,9 @@ struct LevelSet{D,T,Sf<:AbstractArray{T}}
     end
 end
 
+_redistaningPredict!(ϕ,dτ::T) where T = @loop ϕ[I] = ϕ[I]+T(dτ)*redistaning(I,ϕ) over I ∈ inside(ϕ)
+_redistaningCorrect!(ϕ,ϕ⁰,dτ::T) where T = @loop ϕ[I] = ϕ⁰[I]+T(dτ)*(redistaning(I,ϕ)+redistaning(I,ϕ⁰))/2 over I ∈ inside(ϕ)
+
 """
     redistaning(ls::LevelSet; d=5, dτ=0.25, perdir=())
 
@@ -33,9 +36,9 @@ function redistaning!(ls::LevelSet{D,T}; d=5, dτ=0.25, perdir=()) where {D,T}
     itmx = round(T,d/dτ)
     for _∈1:itmx
         ϕ⁰ .= ϕ
-        @inside ϕ[I] = ϕ[I] +T(dτ)*redistaning(I,ϕ)
+        _redistaningPredict!(ϕ,T(dτ))
         BCf!(ϕ;perdir)
-        @inside ϕ[I] = ϕ⁰[I]+T(dτ)*(redistaning(I,ϕ)+redistaning(I,ϕ⁰))/2
+        _redistaningCorrect!(ϕ,ϕ⁰,T(dτ))
         BCf!(ϕ;perdir)
     end
 end
