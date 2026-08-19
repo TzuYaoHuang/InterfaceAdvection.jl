@@ -34,7 +34,7 @@ include("metrics.jl")
     TwoPhaseSimulation(dims::NTuple{N}, u_BC, L::Number;
                         λμ=1e-2, λρ=1e-3, η=0,
                         InterfaceSDF::Function=(x) -> -5-x[1],
-                        λ=Koren,
+                        λ=Koren, normalScheme=getInterfaceNormal_WH!,
                         T=Float32, mem=Array, kwargs...)
 
 Constructor for a two-phase flow simulation based on WaterLily.jl.
@@ -52,6 +52,10 @@ all of `WaterLily.Simulation`'s keyword arguments (e.g. `Δt`, `ν`, `g`, `U`, `
   `minmod`, `vanAlbada1`, `superbee`, `upwind`, or `quick`.
   Forwarded to `WaterLily.Simulation` and stored on `sim.flow.λ`, same as `WaterLily`'s own
   convective scheme keyword. See `flow.jl`.
+- `normalScheme`: interface-normal reconstruction scheme `normalScheme(f,n̂,I)` used by
+  `reconstructInterface!` during VOF advection, e.g. `getInterfaceNormal_WH!` (default),
+  `getInterfaceNormal_WY!`, `getInterfaceNormal_MYC!`, or `getInterfaceNormal_Column!`.
+  Forwarded to `cVOF` and stored on `sim.intf.normalScheme`. See `normalEstimation.jl`.
 - `T`: array element type.
 - `mem`: memory location. `Array`, `CuArray`, `ROCm` to run on CPU, NVIDIA, or
   AMD devices, respectively.
@@ -64,7 +68,7 @@ mutable struct TwoPhaseSimulation <: AbstractSimulation
     function TwoPhaseSimulation(dims::NTuple{N}, args...;
                         T=Float32, mem=Array,
                         λμ=1e-2, λρ=1e-3, η=nothing, InterfaceSDF=nothing,
-                        λ=Koren,
+                        λ=Koren, normalScheme=getInterfaceNormal_WH!,
                         kwargs...) where N
 
         # generate base simulation
@@ -72,7 +76,7 @@ mutable struct TwoPhaseSimulation <: AbstractSimulation
         flow = sim.flow
 
         # multipahse part
-        intf = cVOF(dims;mem,T,InterfaceSDF,μ=flow.ν,λμ,λρ,η,perdir=flow.perdir)
+        intf = cVOF(dims;mem,T,InterfaceSDF,μ=flow.ν,λμ,λρ,η,normalScheme,perdir=flow.perdir)
 
         # correct wrong CFL
         flow.Δt[end] = min(last(flow.Δt),MPCFL(flow,intf))

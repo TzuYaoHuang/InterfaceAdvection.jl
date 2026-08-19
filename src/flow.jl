@@ -153,7 +153,7 @@ upperBoundaryVisc!(r,u,Φ,i,j,N,fFace,λμ,μ,λρ,::Val{true}) = @loop r[I-δ(j
 
 advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=last(a.Δt)) where {D} = advectVOFρuu!(
     f, c.fᶠ, c.α, c.n̂, u¹, u², dt, c.c̄,
-    c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.dρ, c.λρ, a.λ, a.uBC;
+    c.ρu, a.f, a.σ, c.ρuf, c.n̂, u⁰, c.α, c.dρ, c.λρ, a.λ, c.normalScheme, a.uBC;
     perdir=a.perdir, exitBC=a.exitBC,
     # dirO=1:D
     # dirO=shuffle(1:D)
@@ -161,7 +161,7 @@ advectfq!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, u⁰=a.u, dt=last(a.�
 )
 function advectVOFρuu!(
     f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,
-    ρu, r, Φ, ρuf, uStar, uOld, dilaU, dρ, λρ, λ, uBC;
+    ρu, r, Φ, ρuf, uStar, uOld, dilaU, dρ, λρ, λ, normalScheme, uBC;
     perdir=(),exitBC=false, dirO=shuffle(1:D)) where {T,D}
     tol = 10eps(T)
 
@@ -196,7 +196,7 @@ function advectVOFρuu!(
         copyto!(Φ, f) # store old volume fraction
         # advect VOF field in d direction
         fill!(ρuf, 0)
-        advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir, tol)
+        advectVOF1d!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,normalScheme,d; perdir, tol)
 
         # advect uᵢ in d direction
         f2face!(dρ, Φ; perdir) # fold
