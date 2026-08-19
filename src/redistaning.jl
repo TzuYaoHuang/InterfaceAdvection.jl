@@ -19,8 +19,7 @@ struct LevelSet{D,T,Sf<:AbstractArray{T}}
     end
 end
 
-_redistaningPredict!(ϕ,dτ::T) where T = @loop ϕ[I] = ϕ[I]+T(dτ)*redistaning(I,ϕ) over I ∈ inside(ϕ)
-_redistaningCorrect!(ϕ,ϕ⁰,dτ::T) where T = @loop ϕ[I] = ϕ⁰[I]+T(dτ)*(redistaning(I,ϕ)+redistaning(I,ϕ⁰))/2 over I ∈ inside(ϕ)
+_redistaningStage!(ϕ,ϕ⁰,dτ::T,α::T) where T = @loop ϕ[I] = α*ϕ⁰[I]+(1-α)*(ϕ[I]+T(dτ)*redistaning(I,ϕ)) over I ∈ inside(ϕ)
 
 """
     redistaning(ls::LevelSet; d=5, dτ=0.25, perdir=())
@@ -29,16 +28,17 @@ Reinitialize `ls.ϕ` into a signed-distance function by marching the pseudo-time
 
     ∂ₜϕ = sign(ϕ)*(1-|𝛁ϕ|)
 
-to steady state, using forward-Euler pseudo-timestep `dτ` for a total pseudo-time `d`, effective the affected layer thickness.
+to steady state, using Heun's predictor-corrector pseudo-time integration with
+step `dτ` for a total pseudo-time `d`, effectively the affected layer thickness.
 """
-function redistaning!(ls::LevelSet{D,T}; d=5, dτ=0.25, perdir=()) where {D,T}
+function redistaning!(ls::LevelSet{D,T}; d=5, dτ=0.1, perdir=()) where {D,T}
     ϕ,ϕ⁰ = ls.ϕ,ls.ϕ⁰
     itmx = round(T,d/dτ)
     for _∈1:itmx
         ϕ⁰ .= ϕ
-        _redistaningPredict!(ϕ,T(dτ))
+        _redistaningStage!(ϕ,ϕ⁰,T(dτ),T(0))    # ϕ¹  = ϕⁿ+dτL(ϕⁿ)          (predictor)
         BCf!(ϕ;perdir)
-        _redistaningCorrect!(ϕ,ϕ⁰,T(dτ))
+        _redistaningStage!(ϕ,ϕ⁰,T(dτ),T(1/2))  # ϕⁿ⁺¹= ½ϕⁿ+½ϕ¹+½dτL(ϕ¹)    (corrector)
         BCf!(ϕ;perdir)
     end
 end
