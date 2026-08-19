@@ -1,15 +1,17 @@
 
 """
-    reconstructInterface!(f,α,n̂;perdir=())
-    reconstructInterface!(f,α,n̂,I)
+    reconstructInterface!(f,α,n̂,normalScheme;perdir=())
+    reconstructInterface!(f,α,n̂,normalScheme,I)
 
 Reconstruct interface from volume fraction field (`f`), involving normal calculation (`n̂`) and then the intercept (`α`).
+`normalScheme(f,n̂,I)` is the interface-normal reconstruction scheme, e.g. `getInterfaceNormal_WH!`,
+`getInterfaceNormal_WY!`, `getInterfaceNormal_MYC!`, or `getInterfaceNormal_Column!`.
 """
-function reconstructInterface!(f,α,n̂;perdir=())
-    @loop reconstructInterface!(f,α,n̂,I) over I∈inside(f)
+function reconstructInterface!(f,α,n̂,normalScheme;perdir=())
+    @loop reconstructInterface!(f,α,n̂,normalScheme,I) over I∈inside(f)
     BCVOF!(f,α,n̂;perdir)
 end
-function reconstructInterface!(f::AbstractArray{T,D},α,n̂,I) where {T,D}
+function reconstructInterface!(f::AbstractArray{T,D},α,n̂,normalScheme,I) where {T,D}
     # guarding if to role out non-interface cell
     if fullorempty(f[I])
         for i∈1:D n̂[I,i] = 0 end
@@ -18,10 +20,7 @@ function reconstructInterface!(f::AbstractArray{T,D},α,n̂,I) where {T,D}
     end
 
     # get normal
-    getInterfaceNormal_WH!(f,n̂,I)
-    # getInterfaceNormal_WY!(f,n̂,I)
-    # getInterfaceNormal_MYC!(f,n̂,I)
-    # getInterfaceNormal_Column!(f,n̂,I)
+    normalScheme(f,n̂,I)
 
     # get intercept
     α[I] = getIntercept(n̂,I,f[I])

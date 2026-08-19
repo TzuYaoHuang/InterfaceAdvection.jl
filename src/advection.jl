@@ -15,22 +15,23 @@ It calculates the volume fraction after one full time step.
 Volume fraction field `f` is being fluxed with the averaged of two velocity -- `u¹` and `u²`.
 """
 advect!(a::Flow{D}, c::cVOF, f=c.f, u¹=a.u⁰, u²=a.u, dt=last(a.Δt)) where {D} = advectVOF!(
-    f,c.fᶠ,c.α,c.n̂,u¹,u²,dt,c.c̄,c.ρuf,c.λρ; 
-    perdir=a.perdir, 
+    f,c.fᶠ,c.α,c.n̂,u¹,u²,dt,c.c̄,c.ρuf,c.λρ,c.normalScheme;
+    perdir=a.perdir,
     # dirO=1:D
     # dirO=shuffle(1:D)
     dirO=ntuple(i->mod(length(a.Δt)+i,D)+1, D)
 )
 
 """
-    advectVOF!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ; perdir)
+    advectVOF!(f,fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,normalScheme; perdir)
 
-This is the expanded function for `advect!`. 
+This is the expanded function for `advect!`.
 `fᶠ` is where to store face flux in one direction.
 `c̄` is used to take care (de-)activation of dilation term.
 `ρuf` stores the mass flux for mass-momentum consistent method.
+`normalScheme` is the interface-normal reconstruction scheme, e.g. `getInterfaceNormal_WH!`.
 """
-function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; perdir=(), dirO=shuffle(1:D)) where {T,D}
+function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ,normalScheme; perdir=(), dirO=shuffle(1:D)) where {T,D}
     tol = 10eps(T)
 
     fill!(ρuf, 0)
@@ -61,7 +62,7 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; 
         δt = OpCoeff[iOp]*Δt
 
         # advect VOF field in d direction
-        reconstructInterface!(f,α,n̂;perdir)
+        reconstructInterface!(f,α,n̂,normalScheme;perdir)
         getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
         @loop f[I] += fᶠ[I]-fᶠ[I+δ(d,I)] + c̄[I]*(∂(d,I,u)+∂(d,I,u⁰))*δt/2 over I∈inside(f)
 
@@ -76,8 +77,8 @@ function advectVOF!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,Δt,c̄,ρuf,λρ; 
     # BCf!(f;perdir)
 end
 
-function advectVOF1d!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,d; perdir=(), tol=10eps(T)) where {T,D}
-    reconstructInterface!(f,α,n̂;perdir)
+function advectVOF1d!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ,normalScheme,d; perdir=(), tol=10eps(T)) where {T,D}
+    reconstructInterface!(f,α,n̂,normalScheme;perdir)
     getVOFFlux!(fᶠ,f,α,n̂,u,u⁰,δt,d,ρuf,λρ)
     @loop f[I] += fᶠ[I]-fᶠ[I+δ(d,I)] + c̄[I]*(∂(d,I,u)+∂(d,I,u⁰))*δt/2 over I∈inside(f)
 
@@ -85,9 +86,6 @@ function advectVOF1d!(f::AbstractArray{T,D},fᶠ,α,n̂,u,u⁰,δt,c̄,ρuf,λρ
 
     cleanWisp!(f,tol)
     BCf!(f;perdir)
-end
-
-function advectρuu1d!(ρu, uOld, um, ρuf, c̄, u, u⁰, d; perdir=())
 end
 
 """
