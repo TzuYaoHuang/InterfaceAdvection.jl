@@ -261,6 +261,54 @@ end
     end
 end
 
+@testset "redistaning.jl" begin
+    import InterfaceAdvection: redistaning, _redistaningStage!, inside
+
+    # redistaning(I,ϕ) = sign(ϕ[I])*(1-|𝛁ϕ|), 𝛁ϕ central-differenced over 2 cells.
+    # A 1D ramp of slope 2 (uniform in the other dim) gives an exact, closed-form gradient.
+    ϕ = Float64[2*(i-3) for i∈1:5, j∈1:5]
+    @test redistaning(CartesianIndex(4,3),ϕ) ≈ -1.0
+    # A diagonal plane ϕ=i+j has |𝛁ϕ|=√2 everywhere in the interior.
+    ϕd = Float64[i+j for i∈1:6, j∈1:6]
+    @test redistaning(CartesianIndex(3,3),ϕd) ≈ 1-√2
+
+    # _redistaningStage!(ϕ,ϕ⁰,dτ,α): ϕ .= α*ϕ⁰+(1-α)*(ϕ+dτ*L(ϕ)). On a field with spatially
+    # uniform L (the diagonal plane above), Heun's predictor (α=0) + corrector (α=1/2) must
+    # integrate exactly like forward-Euler, ϕⁿ⁺¹ = ϕⁿ+dτ*L; the tiny residual below is the
+    # in-place (Gauss-Seidel-like) sweep order of @loop reading already-updated neighbors.
+    dτ = 0.01
+    L = 1-√2
+    ϕ0 = copy(ϕd)
+    _redistaningStage!(ϕd,ϕ0,dτ,0.0)
+    _redistaningStage!(ϕd,ϕ0,dτ,0.5)
+    @test maximum(abs.(ϕd[inside(ϕd)] .- (ϕ0[inside(ϕd)] .+ dτ*L))) < 1e-3
+
+    for mem ∈ arrays
+        # LevelSet(sim) builds ϕ=2f-1, reusing sim.intf.f⁰/α's storage as ϕ/ϕ⁰.
+        sim = TwoPhaseSimulation((8,8), (0.,0.), 8.; T=Float64, mem, InterfaceSDF=x->x[1]-4, perdir=(2,))
+        f0 = copy(sim.intf.f)
+        ls = LevelSet(sim)
+        @test ls.ϕ === sim.intf.f⁰
+        @test ls.ϕ⁰ === sim.intf.α
+        @test ls.ϕ ≈ 2 .* f0 .- 1
+
+        # Planar interface at x=8: after reinitialization, ϕ should be a genuine signed-distance
+        # field, i.e. monotone across the interface, correctly signed, finite everywhere, still
+        # periodic in y, and (within a couple of cells of the interface, where the naive
+        # central-difference scheme is most accurate) close to the true distance -(x-8).
+        sim = TwoPhaseSimulation((16,16), (0.,0.), 16.; T=Float64, mem, InterfaceSDF=x->x[1]-8, perdir=(2,))
+        ls = LevelSet(sim)
+        redistaning!(ls; d=4, dτ=0.05, perdir=(2,))
+        ϕ = Array(ls.ϕ)
+        @test all(isfinite, ϕ)
+        @test issorted(ϕ[2:end-1,9], rev=true)
+        @test ϕ[:,1] == ϕ[:,end-1] && ϕ[:,end] == ϕ[:,2]
+        for ix∈8:11
+            @test ϕ[ix,9] ≈ -(ix-1.5-8) atol=0.15 # NOTE: Need to make it stricter when implemented a better algorithm
+        end
+    end
+end
+
 @testset "metrics.jl" begin
     import InterfaceAdvection: ρkeI, ρuI, ρgh, EnsI
 
