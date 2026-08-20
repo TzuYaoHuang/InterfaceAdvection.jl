@@ -9,6 +9,8 @@ struct LevelSet{D,T,Sf<:AbstractArray{T}}
     ϕ :: Sf
     ϕ⁰:: Sf
     ϕini::Sf
+    L :: Sf
+    perdir :: NTuple{D}
     function LevelSet(sim::TwoPhaseSimulation)
         intf = sim.intf
         D,T,Sf = typeof(intf).parameters[1:3]
@@ -17,12 +19,16 @@ struct LevelSet{D,T,Sf<:AbstractArray{T}}
         ϕini = intf.fᶠ
         @. ϕ = 2intf.f-1
         ϕini .= ϕ
+        L = sim.flow.σ
 
-        new{D,T,Sf}(ϕ,ϕ⁰,ϕini)
+        new{D,T,Sf}(ϕ,ϕ⁰,ϕini,L,intf.perdir)
     end
 end
 
-_redistaningStage!(ϕ,ϕ⁰,ϕini,dτ::T,α::T) where T = @loop ϕ[I] = α*ϕ⁰[I]+(1-α)*(ϕ[I]+T(dτ)*redistaning(I,ϕ,ϕini)) over I ∈ inside(ϕ)
+function _redistaningStage!(ϕ,ϕ⁰,ϕini,L,dτ::T,α::T) where T 
+    computeL!(L,ϕ,ϕini)
+    @loop ϕ[I] = α*ϕ⁰[I]+(1-α)*(ϕ[I]+T(dτ)*L[I]) over I ∈ inside(ϕ)
+end
 
 """
     redistaning(ls::LevelSet; d=5, dτ=0.25, perdir=())
@@ -36,18 +42,40 @@ integration with step `dτ` for a total pseudo-time `d`, effectively the
 affected layer thickness.
 """
 function redistaning!(ls::LevelSet{D,T}; d=5, dτ=0.5, perdir=()) where {D,T}
-    ϕ,ϕ⁰,ϕini = ls.ϕ,ls.ϕ⁰,ls.ϕini
+    ϕ,ϕ⁰,ϕini,L = ls.ϕ,ls.ϕ⁰,ls.ϕini,ls.L
     itmx = round(T,d/dτ)
     for _∈1:itmx
         ϕ⁰ .= ϕ
-        _redistaningStage!(ϕ,ϕ⁰,ϕini,T(dτ),T(0))    # ϕ¹  = ϕⁿ+dτL(ϕⁿ)                (stage 1)
+        _redistaningStage!(ϕ,ϕ⁰,ϕini,L,T(dτ),T(0))    # ϕ¹  = ϕⁿ+dτL(ϕⁿ)                (stage 1)
         BCf!(ϕ;perdir)
-        _redistaningStage!(ϕ,ϕ⁰,ϕini,T(dτ),T(3/4))  # ϕ²  = ¾ϕⁿ+¼ϕ¹+¼dτL(ϕ¹)          (stage 2)
+        _redistaningStage!(ϕ,ϕ⁰,ϕini,L,T(dτ),T(3/4))  # ϕ²  = ¾ϕⁿ+¼ϕ¹+¼dτL(ϕ¹)          (stage 2)
         BCf!(ϕ;perdir)
-        _redistaningStage!(ϕ,ϕ⁰,ϕini,T(dτ),T(1/3))  # ϕⁿ⁺¹= ⅓ϕⁿ+⅔ϕ²+⅔dτL(ϕ²)          (stage 3)
+        _redistaningStage!(ϕ,ϕ⁰,ϕini,L,T(dτ),T(1/3))  # ϕⁿ⁺¹= ⅓ϕⁿ+⅔ϕ²+⅔dτL(ϕ²)          (stage 3)
         BCf!(ϕ;perdir)
     end
 end
+
+function computeL!(L::AbstractArray{T,D},ϕ,ϕini;perdir) where {T,D}
+    fill!(L,0)
+    N = size(L)
+    # L += ∇ϕᵢ²
+    for i∈1:D
+        tagper = (i in perdir)
+        # lower boundary cell
+        lowerL!(L,ϕ,ϕini,i,N,Val{tagper}())
+        # inner cell
+        # upper boundary cell
+    end
+    # L = sign(ϕ_ini) * (1-√∇ϕᵢ²)
+end
+
+# Neumann building block
+lowerL!(L,ϕ,ϕini,i,N,::Val{false}) = @loop L[I] += 𝛁ϕᵢ²(
+    ϕ[I-δ(i,I)], ϕ[I-δ(i,I)], ϕ[I], ϕ[I+δ(i,I)], ϕ[I+δ(i,I)],
+    sign(ϕini[I])
+) over I∈slice(N,2,i,2)
+
+minmod(a,b) = ifelse(abs(a)<=abs(b), a, b)
 
 """
     redistaning(I,ϕ)
@@ -56,18 +84,23 @@ Pointwise pseudo-time right-hand side `sign(ϕ_ini)*(1-|𝛁ϕ|)`, with `𝛁ϕ`
 central difference at cell `I`.
 Derivative estimated with first-order ENO (minmod) method by [Sussman & Fatemi (1999)](https://doi.org/10.1137/S1064827596298245)
 """
-function redistaning(I,ϕ::AbstractArray{T,D},ϕini) where {T,D}
-    𝛁ϕ² = zero(T)
-    s = sign(ϕini[I])
-    for i∈1:D
-        dϕ⁺ = ϕ[I+δ(i,I)]-ϕ[I]
-        dϕ⁻ = ϕ[I]-ϕ[I-δ(i,I)]
-        dϕᶜ = (dϕ⁺+dϕ⁻)/2
-        if dϕ⁺*s < 0 && dϕᶜ*s < 0
-            𝛁ϕ² += abs2(dϕ⁺)
-        elseif dϕ⁻*s > 0 && dϕᶜ*s > 0
-            𝛁ϕ² += abs2(dϕ⁻)
-        end
+function 𝛁ϕᵢ²(a,b,c,d,e,s) where {T,D}
+    dϕ⁺ = d-c
+    dϕ⁻ = c-b
+    
+    d²ϕ⁺ = e+c-2d
+    d²ϕ⁰ = d+b-2c
+    d²ϕ⁻ = c+a-2b
+
+    dϕᴿ = dϕ⁺-minmod(d²ϕ⁺,d²ϕ⁰)/2
+    dϕᴸ = dϕ⁻+minmod(d²ϕ⁰,d²ϕ⁻)/2
+
+    wᴿ = dϕᴿ*s
+    wᴸ = dϕᴸ*s
+
+    if     wᴿ < 0 && (wᴿ+wᴸ) < 0
+        return abs2(dϕᴿ)
+    elseif wᴸ > 0 && (wᴿ+wᴸ) > 0
+        return abs2(dϕᴸ)
     end
-    return s*(1-sqrt(𝛁ϕ²))
 end
