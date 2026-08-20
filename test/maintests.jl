@@ -261,6 +261,63 @@ end
     end
 end
 
+@testset "redistaning.jl" begin
+    import InterfaceAdvection: computeL!, _redistaningStage!, inside
+
+    # computeL!(L,ϕ,ϕini;perdir) fills L[I] = sign(ϕini[I])*(1-|𝛁ϕ|). On an exact
+    # signed-distance ramp (|𝛁ϕ|=1 everywhere, including at the domain edges, for
+    # both the Neumann and periodic building blocks), L must vanish everywhere.
+    N = (18,18)
+    ϕ = Float64[i-2.5-8 for i∈1:N[1], j∈1:N[2]]
+    ϕini = copy(ϕ)
+    L = zero(ϕ)
+    computeL!(L,ϕ,ϕini;perdir=())
+    @test maximum(abs, L[inside(L)]) < 1e-12
+    fill!(L,0)
+    computeL!(L,ϕ,ϕini;perdir=(2,))
+    @test maximum(abs, L[inside(L)]) < 1e-12
+
+    # _redistaningStage!(ϕ,ϕ⁰,ϕini,L,dτ,α;perdir): ϕ .= α*ϕ⁰+(1-α)*(ϕ+dτ*L(ϕ)). On a field
+    # with spatially uniform L (the diagonal plane below, where |𝛁ϕ|=√2 everywhere in the
+    # interior), any consistent Runge-Kutta stage sequence with weights summing correctly
+    # must integrate exactly like forward-Euler, ϕⁿ⁺¹ = ϕⁿ+dτ*L; the tiny residual below is
+    # the in-place (Gauss-Seidel-like) sweep order of @loop reading already-updated neighbors.
+    ϕd = Float64[i+j for i∈1:6, j∈1:6]
+    dτ = 0.01
+    Lval = 1-√2
+    Lbuf = zero(ϕd)
+    ϕ0 = copy(ϕd)
+    _redistaningStage!(ϕd,ϕ0,ϕd,Lbuf,dτ,0.0)
+    _redistaningStage!(ϕd,ϕ0,ϕd,Lbuf,dτ,0.75)
+    _redistaningStage!(ϕd,ϕ0,ϕd,Lbuf,dτ,1/3)
+    @test maximum(abs.(ϕd[inside(ϕd)] .- (ϕ0[inside(ϕd)] .+ dτ*Lval))) < 1e-3
+
+    for mem ∈ arrays
+        # LevelSet(sim) builds ϕ=2f-1, reusing sim.intf.f⁰/α's storage as ϕ/ϕ⁰.
+        sim = TwoPhaseSimulation((8,8), (0.,0.), 8.; T=Float64, mem, InterfaceSDF=x->x[1]-4, perdir=(2,))
+        f0 = copy(sim.intf.f)
+        ls = LevelSet(sim)
+        @test ls.ϕ === sim.intf.f⁰
+        @test ls.ϕ⁰ === sim.intf.α
+        @test ls.ϕ ≈ 2 .* f0 .- 1
+
+        # Planar interface at x=8: after reinitialization, ϕ should be a genuine signed-distance
+        # field, i.e. monotone across the interface, correctly signed, finite everywhere, still
+        # periodic in y, and (within a couple of cells of the interface, where the naive
+        # central-difference scheme is most accurate) close to the true distance -(x-8).
+        sim = TwoPhaseSimulation((16,16), (0.,0.), 16.; T=Float64, mem, InterfaceSDF=x->x[1]-8, perdir=(2,))
+        ls = LevelSet(sim)
+        redistaning!(ls; d=4, dτ=0.05, perdir=(2,))
+        ϕ = Array(ls.ϕ)
+        @test all(isfinite, ϕ)
+        @test issorted(ϕ[2:end-1,9], rev=true)
+        @test ϕ[:,1] == ϕ[:,end-1] && ϕ[:,end] == ϕ[:,2]
+        for ix∈8:11
+            @test ϕ[ix,9] ≈ -(ix-1.5-8) atol=0.01 # NOTE: Need to make it stricter when implemented a better algorithm
+        end
+    end
+end
+
 @testset "metrics.jl" begin
     import InterfaceAdvection: ρkeI, ρuI, ρgh, EnsI
 
