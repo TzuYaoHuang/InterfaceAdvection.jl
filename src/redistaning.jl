@@ -8,37 +8,40 @@ Not an actual signed-distance function until reinitialized with [`redistaning`](
 struct LevelSet{D,T,Sf<:AbstractArray{T}}
     ϕ :: Sf
     ϕ⁰:: Sf
+    ϕini::Sf
     function LevelSet(sim::TwoPhaseSimulation)
         intf = sim.intf
         D,T,Sf = typeof(intf).parameters[1:3]
         ϕ = intf.f⁰
         ϕ⁰= intf.α
+        ϕini = intf.fᶠ
         @. ϕ = 2intf.f-1
+        ϕini .= ϕ
 
-        new{D,T,Sf}(ϕ,ϕ⁰)
+        new{D,T,Sf}(ϕ,ϕ⁰,ϕini)
     end
 end
 
-_redistaningStage!(ϕ,ϕ⁰,dτ::T,α::T) where T = @loop ϕ[I] = α*ϕ⁰[I]+(1-α)*(ϕ[I]+T(dτ)*redistaning(I,ϕ)) over I ∈ inside(ϕ)
+_redistaningStage!(ϕ,ϕ⁰,ϕini,dτ::T,α::T) where T = @loop ϕ[I] = α*ϕ⁰[I]+(1-α)*(ϕ[I]+T(dτ)*redistaning(I,ϕ,ϕini)) over I ∈ inside(ϕ)
 
 """
     redistaning(ls::LevelSet; d=5, dτ=0.25, perdir=())
 
 Reinitialize `ls.ϕ` into a signed-distance function by marching the pseudo-time PDE
 
-    ∂ₜϕ = sign(ϕ)*(1-|𝛁ϕ|)
+    ∂ₜϕ = sign(ϕ_ini)*(1-|𝛁ϕ|)
 
 to steady state, using Heun's predictor-corrector pseudo-time integration with
 step `dτ` for a total pseudo-time `d`, effectively the affected layer thickness.
 """
 function redistaning!(ls::LevelSet{D,T}; d=5, dτ=0.1, perdir=()) where {D,T}
-    ϕ,ϕ⁰ = ls.ϕ,ls.ϕ⁰
+    ϕ,ϕ⁰,ϕini = ls.ϕ,ls.ϕ⁰,ls.ϕini
     itmx = round(T,d/dτ)
     for _∈1:itmx
         ϕ⁰ .= ϕ
-        _redistaningStage!(ϕ,ϕ⁰,T(dτ),T(0))    # ϕ¹  = ϕⁿ+dτL(ϕⁿ)          (predictor)
+        _redistaningStage!(ϕ,ϕ⁰,ϕini,T(dτ),T(0))    # ϕ¹  = ϕⁿ+dτL(ϕⁿ)          (predictor)
         BCf!(ϕ;perdir)
-        _redistaningStage!(ϕ,ϕ⁰,T(dτ),T(1/2))  # ϕⁿ⁺¹= ½ϕⁿ+½ϕ¹+½dτL(ϕ¹)    (corrector)
+        _redistaningStage!(ϕ,ϕ⁰,ϕini,T(dτ),T(1/2))  # ϕⁿ⁺¹= ½ϕⁿ+½ϕ¹+½dτL(ϕ¹)    (corrector)
         BCf!(ϕ;perdir)
     end
 end
@@ -46,13 +49,13 @@ end
 """
     redistaning(I,ϕ)
 
-Pointwise pseudo-time right-hand side `sign(ϕ)*(1-|𝛁ϕ|)`, with `𝛁ϕ` estimated by
+Pointwise pseudo-time right-hand side `sign(ϕ_ini)*(1-|𝛁ϕ|)`, with `𝛁ϕ` estimated by
 central difference at cell `I`.
 """
-function redistaning(I,ϕ::AbstractArray{T,D}) where {T,D}
+function redistaning(I,ϕ::AbstractArray{T,D},ϕini) where {T,D}
     𝛁ϕ² = zero(T)
     for i∈1:D
         𝛁ϕ² += abs2(ϕ[I+δ(i,I)]-ϕ[I-δ(i,I)])
     end
-    return sign(ϕ[I])*(1-sqrt(𝛁ϕ²)/2)
+    return sign(ϕini[I])*(1-sqrt(𝛁ϕ²)/2)
 end
