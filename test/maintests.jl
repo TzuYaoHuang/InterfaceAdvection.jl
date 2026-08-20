@@ -306,7 +306,7 @@ end
         @test issorted(ϕ[2:end-1,9], rev=true)
         @test ϕ[:,1] == ϕ[:,end-1] && ϕ[:,end] == ϕ[:,2]
         for ix∈8:11
-            @test ϕ[ix,9] ≈ -(ix-1.5-8) atol=0.15 # NOTE: Need to make it stricter when implemented a better algorithm
+            @test ϕ[ix,9] ≈ -(ix-1.5-8) atol=0.01 # NOTE: Need to make it stricter when implemented a better algorithm
         end
     end
 end
