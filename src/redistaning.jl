@@ -3,7 +3,7 @@
 
 Signed level-set field `ϕ`, built from the VOF field `sim.intf.f` via `ϕ = 2f-1`.
 Reuses `sim.intf.f⁰`'s storage as the buffer for `ϕ`, so no extra memory is allocated.
-Not an actual signed-distance function until reinitialized with [`redistaning`](@ref).
+Not an actual signed-distance function until reinitialized with [`redistaning!`](@ref).
 """
 struct LevelSet{D,T,Sf<:AbstractArray{T}}
     ϕ :: Sf
@@ -31,7 +31,7 @@ function _redistaningStage!(ϕ,ϕ⁰,ϕini,L,dτ::T,α::T;perdir=()) where T
 end
 
 """
-    redistaning(ls::LevelSet; d=5, dτ=0.25, perdir=())
+    redistaning!(ls::LevelSet; d=5, dτ=0.5, perdir=())
 
 Reinitialize `ls.ϕ` into a signed-distance function by marching the pseudo-time PDE
 
@@ -55,6 +55,15 @@ function redistaning!(ls::LevelSet{D,T}; d=5, dτ=0.5, perdir=()) where {D,T}
     end
 end
 
+"""
+    computeL!(L,ϕ,ϕini;perdir=())
+
+Fill `L[I] = ϕini[I]*(1-|𝛁ϕ|)`, the reinitialization PDE's pseudo-time
+right-hand side, at every interior cell. `|𝛁ϕ|²` is accumulated direction by
+direction via [`𝛁ϕᵢ²`](@ref), using one-sided stencils near the domain edges
+in each direction listed in `perdir` (periodic) or not (Neumann); see
+`lowerL!`/`upperL!` for those boundary building blocks.
+"""
 function computeL!(L::AbstractArray{T,D},ϕ,ϕini;perdir=()) where {T,D}
     fill!(L,0)
     N = size(L)
@@ -71,8 +80,8 @@ function computeL!(L::AbstractArray{T,D},ϕ,ϕini;perdir=()) where {T,D}
         # upper boundary cell
         upperL!(L,ϕ,ϕini,i,N,Val{tagper}())
     end
-    # L = sign(ϕ_ini) * (1-√∇ϕᵢ²)
-    @loop L[I] = sign(ϕini[I])*(1-sqrt(L[I])) over I∈inside(L)
+    # L = smoothed_sign(ϕ_ini) * (1-√∇ϕᵢ²)
+    @loop L[I] = (ϕini[I])*(1-sqrt(L[I])) over I∈inside(L)
 end
 
 # Neumann building block: the point 2 cells out is invalid, so it's mirrored
@@ -101,11 +110,14 @@ upperL!(L,ϕ,ϕini,i,N,::Val{true}) = @loop L[I] += 𝛁ϕᵢ²(
 minmod(a,b) = ifelse(abs(a)<=abs(b), a, b)
 
 """
-    redistaning(I,ϕ)
+    𝛁ϕᵢ²(a,b,c,d,e,s)
 
-Pointwise pseudo-time right-hand side `sign(ϕ_ini)*(1-|𝛁ϕ|)`, with `𝛁ϕ` estimated by
-central difference at cell `I`.
-Derivative estimated with first-order ENO (minmod) method by [Sussman & Fatemi (1999)](https://doi.org/10.1137/S1064827596298245)
+One-sided contribution to `|𝛁ϕ|²` along a single direction, from the 5-point
+stencil `a,b,c,d,e = ϕ[I-2],ϕ[I-1],ϕ[I],ϕ[I+1],ϕ[I+2]` and upwind sign `s`
+(typically `sign(ϕ_ini[I])`). Returns `0` when neither one-sided derivative is
+upwind (i.e. this direction doesn't propagate information into `I`).
+Derivative estimated with second-order ENO (minmod-limited) method by
+[Sussman et al. (1999)](https://doi.org/10.1006/jcph.1998.6106).
 """
 function 𝛁ϕᵢ²(a,b,c,d,e,s) where {T,D}
     dϕ⁺ = d-c
