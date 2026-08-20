@@ -267,20 +267,22 @@ end
     # redistaning(I,ϕ) = sign(ϕ[I])*(1-|𝛁ϕ|), 𝛁ϕ central-differenced over 2 cells.
     # A 1D ramp of slope 2 (uniform in the other dim) gives an exact, closed-form gradient.
     ϕ = Float64[2*(i-3) for i∈1:5, j∈1:5]
-    @test redistaning(CartesianIndex(4,3),ϕ) ≈ -1.0
+    @test redistaning(CartesianIndex(4,3),ϕ,ϕ) ≈ -1.0
     # A diagonal plane ϕ=i+j has |𝛁ϕ|=√2 everywhere in the interior.
     ϕd = Float64[i+j for i∈1:6, j∈1:6]
-    @test redistaning(CartesianIndex(3,3),ϕd) ≈ 1-√2
+    @test redistaning(CartesianIndex(3,3),ϕd,ϕd) ≈ 1-√2
 
-    # _redistaningStage!(ϕ,ϕ⁰,dτ,α): ϕ .= α*ϕ⁰+(1-α)*(ϕ+dτ*L(ϕ)). On a field with spatially
-    # uniform L (the diagonal plane above), Heun's predictor (α=0) + corrector (α=1/2) must
-    # integrate exactly like forward-Euler, ϕⁿ⁺¹ = ϕⁿ+dτ*L; the tiny residual below is the
-    # in-place (Gauss-Seidel-like) sweep order of @loop reading already-updated neighbors.
+    # _redistaningStage!(ϕ,ϕ⁰,ϕini,dτ,α): ϕ .= α*ϕ⁰+(1-α)*(ϕ+dτ*L(ϕ)). On a field with spatially
+    # uniform L (the diagonal plane above), any consistent Runge-Kutta stage sequence with
+    # weights summing correctly must integrate exactly like forward-Euler, ϕⁿ⁺¹ = ϕⁿ+dτ*L;
+    # the tiny residual below is the in-place (Gauss-Seidel-like) sweep order of @loop
+    # reading already-updated neighbors.
     dτ = 0.01
     L = 1-√2
     ϕ0 = copy(ϕd)
-    _redistaningStage!(ϕd,ϕ0,dτ,0.0)
-    _redistaningStage!(ϕd,ϕ0,dτ,0.5)
+    _redistaningStage!(ϕd,ϕ0,ϕd,dτ,0.0)
+    _redistaningStage!(ϕd,ϕ0,ϕd,dτ,0.75)
+    _redistaningStage!(ϕd,ϕ0,ϕd,dτ,1/3)
     @test maximum(abs.(ϕd[inside(ϕd)] .- (ϕ0[inside(ϕd)] .+ dτ*L))) < 1e-3
 
     for mem ∈ arrays
