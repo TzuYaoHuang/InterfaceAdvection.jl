@@ -10,7 +10,7 @@ struct LevelSet{D,T,Sf<:AbstractArray{T}}
     ϕ⁰:: Sf
     ϕini::Sf
     L :: Sf
-    perdir :: NTuple{D}
+    perdir :: NTuple
     function LevelSet(sim::TwoPhaseSimulation)
         intf = sim.intf
         D,T,Sf = typeof(intf).parameters[1:3]
@@ -25,8 +25,8 @@ struct LevelSet{D,T,Sf<:AbstractArray{T}}
     end
 end
 
-function _redistaningStage!(ϕ,ϕ⁰,ϕini,L,dτ::T,α::T) where T 
-    computeL!(L,ϕ,ϕini)
+function _redistaningStage!(ϕ,ϕ⁰,ϕini,L,dτ::T,α::T;perdir=()) where T
+    computeL!(L,ϕ,ϕini;perdir)
     @loop ϕ[I] = α*ϕ⁰[I]+(1-α)*(ϕ[I]+T(dτ)*L[I]) over I ∈ inside(ϕ)
 end
 
@@ -46,16 +46,16 @@ function redistaning!(ls::LevelSet{D,T}; d=5, dτ=0.5, perdir=()) where {D,T}
     itmx = round(T,d/dτ)
     for _∈1:itmx
         ϕ⁰ .= ϕ
-        _redistaningStage!(ϕ,ϕ⁰,ϕini,L,T(dτ),T(0))    # ϕ¹  = ϕⁿ+dτL(ϕⁿ)                (stage 1)
+        _redistaningStage!(ϕ,ϕ⁰,ϕini,L,T(dτ),T(0);perdir)    # ϕ¹  = ϕⁿ+dτL(ϕⁿ)                (stage 1)
         BCf!(ϕ;perdir)
-        _redistaningStage!(ϕ,ϕ⁰,ϕini,L,T(dτ),T(3/4))  # ϕ²  = ¾ϕⁿ+¼ϕ¹+¼dτL(ϕ¹)          (stage 2)
+        _redistaningStage!(ϕ,ϕ⁰,ϕini,L,T(dτ),T(3/4);perdir)  # ϕ²  = ¾ϕⁿ+¼ϕ¹+¼dτL(ϕ¹)          (stage 2)
         BCf!(ϕ;perdir)
-        _redistaningStage!(ϕ,ϕ⁰,ϕini,L,T(dτ),T(1/3))  # ϕⁿ⁺¹= ⅓ϕⁿ+⅔ϕ²+⅔dτL(ϕ²)          (stage 3)
+        _redistaningStage!(ϕ,ϕ⁰,ϕini,L,T(dτ),T(1/3);perdir)  # ϕⁿ⁺¹= ⅓ϕⁿ+⅔ϕ²+⅔dτL(ϕ²)          (stage 3)
         BCf!(ϕ;perdir)
     end
 end
 
-function computeL!(L::AbstractArray{T,D},ϕ,ϕini;perdir) where {T,D}
+function computeL!(L::AbstractArray{T,D},ϕ,ϕini;perdir=()) where {T,D}
     fill!(L,0)
     N = size(L)
     # L += ∇ϕᵢ²
@@ -64,16 +64,39 @@ function computeL!(L::AbstractArray{T,D},ϕ,ϕini;perdir) where {T,D}
         # lower boundary cell
         lowerL!(L,ϕ,ϕini,i,N,Val{tagper}())
         # inner cell
+        @loop L[I] += 𝛁ϕᵢ²(
+            ϕ[I-2δ(i,I)], ϕ[I-δ(i,I)], ϕ[I], ϕ[I+δ(i,I)], ϕ[I+2δ(i,I)],
+            sign(ϕini[I])
+        ) over I∈CartesianIndices(ntuple(k -> k==i ? (3:N[i]-2) : (2:N[k]-1), D))
         # upper boundary cell
+        upperL!(L,ϕ,ϕini,i,N,Val{tagper}())
     end
     # L = sign(ϕ_ini) * (1-√∇ϕᵢ²)
+    @loop L[I] = sign(ϕini[I])*(1-sqrt(L[I])) over I∈inside(L)
 end
 
-# Neumann building block
+# Neumann building block: the point 2 cells out is invalid, so it's mirrored
+# from the 1-cell-out neighbor (zero-curvature extrapolation past the ghost).
 lowerL!(L,ϕ,ϕini,i,N,::Val{false}) = @loop L[I] += 𝛁ϕᵢ²(
-    ϕ[I-δ(i,I)], ϕ[I-δ(i,I)], ϕ[I], ϕ[I+δ(i,I)], ϕ[I+δ(i,I)],
+    ϕ[I-δ(i,I)], ϕ[I-δ(i,I)], ϕ[I], ϕ[I+δ(i,I)], ϕ[I+2δ(i,I)],
     sign(ϕini[I])
 ) over I∈slice(N,2,i,2)
+upperL!(L,ϕ,ϕini,i,N,::Val{false}) = @loop L[I] += 𝛁ϕᵢ²(
+    ϕ[I-2δ(i,I)], ϕ[I-δ(i,I)], ϕ[I], ϕ[I+δ(i,I)], ϕ[I+δ(i,I)],
+    sign(ϕini[I])
+) over I∈slice(N,N[i]-1,i,2)
+
+# Periodic building block: the 1-cell-out neighbor is already valid (BCf! wraps
+# the ghost layer); the 2-cell-out neighbor sits past the ghost, so it's fetched
+# directly from the wrapped-around interior cell via CIj.
+lowerL!(L,ϕ,ϕini,i,N,::Val{true}) = @loop L[I] += 𝛁ϕᵢ²(
+    ϕ[CIj(i,I,N[i]-2)], ϕ[I-δ(i,I)], ϕ[I], ϕ[I+δ(i,I)], ϕ[I+2δ(i,I)],
+    sign(ϕini[I])
+) over I∈slice(N,2,i,2)
+upperL!(L,ϕ,ϕini,i,N,::Val{true}) = @loop L[I] += 𝛁ϕᵢ²(
+    ϕ[I-2δ(i,I)], ϕ[I-δ(i,I)], ϕ[I], ϕ[I+δ(i,I)], ϕ[CIj(i,I,3)],
+    sign(ϕini[I])
+) over I∈slice(N,N[i]-1,i,2)
 
 minmod(a,b) = ifelse(abs(a)<=abs(b), a, b)
 
@@ -102,5 +125,7 @@ function 𝛁ϕᵢ²(a,b,c,d,e,s) where {T,D}
         return abs2(dϕᴿ)
     elseif wᴸ > 0 && (wᴿ+wᴸ) > 0
         return abs2(dϕᴸ)
+    else
+        return zero(dϕᴿ)
     end
 end
