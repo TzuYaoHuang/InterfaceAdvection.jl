@@ -97,8 +97,9 @@ end
     # at the end of time step to avoid divide by wrong ρ
     viscSurfTenρu!(a.f,a.u,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
+    a.u⁰ .= a.u  # get u at t (1/2) for udf
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC)
-    udf!(a,udf,a.u,t₁;dt=δt, kwargs...) # advect with projected u, in sync with WaterLily's mom_correct!
+    udf!(a,udf,a.u⁰,t₁;dt=δt, kwargs...) # advect with projected u, in sync with WaterLily's mom_correct!
     BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
