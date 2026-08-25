@@ -75,7 +75,7 @@ end
     viscSurfTenρu!(a.f,a.u,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,tₘ,a.g,a.uBC,dtCoeff)
-    udf!(a,udf,a.u⁰,t₀;dt=dtCoeff*δt, kwargs...) # advect with u⁰, in sync with WaterLily's mom_predict!
+    udf!(a,udf,a.u⁰,t₀;dt=dtCoeff*δt,fc=c.f⁰, kwargs...) # advect with u⁰, in sync with WaterLily's mom_predict!
     BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -99,7 +99,7 @@ end
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     a.u⁰ .= a.u  # get u at t (1/2) for udf
     updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC)
-    udf!(a,udf,a.u⁰,t₁;dt=δt, kwargs...) # advect with projected u, in sync with WaterLily's mom_correct!
+    udf!(a,udf,a.u⁰,t₁;dt=δt,fc=c.f, kwargs...) # advect with projected u, in sync with WaterLily's mom_correct!
     BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
