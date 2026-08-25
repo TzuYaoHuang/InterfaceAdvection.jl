@@ -74,8 +74,7 @@ end
     @. c.f⁰ = (c.f⁰+c.f)/2
     viscSurfTenρu!(a.f,a.u,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
-    updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,tₘ,a.g,a.uBC,dtCoeff)
-    udf!(a,udf,a.u⁰,t₀;dt=dtCoeff*δt, kwargs...) # advect with u⁰, in sync with WaterLily's mom_predict!
+    updateU!(a,c.ρu,c.n̂,a.f,δt,c.f⁰,c.λρ,tₘ,a.g,a.uBC,dtCoeff;udf,tudf=t₀,kwargs...) # udf advects with u⁰, in sync with WaterLily's mom_predict!
     BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f⁰,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -98,8 +97,7 @@ end
     viscSurfTenρu!(a.f,a.u,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     a.u⁰ .= a.u  # get u at t (1/2) for udf
-    updateU!(a.u,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC)
-    udf!(a,udf,a.u⁰,t₁;dt=δt, kwargs...) # advect with projected u, in sync with WaterLily's mom_correct!
+    updateU!(a,c.ρu,c.n̂,a.f,δt,c.f,c.λρ,t₁,a.g,a.uBC;udf,kwargs...) # udf advects with projected u, in sync with WaterLily's mom_correct!
     BC!(a.u,a.uBC,a.exitBC,a.perdir)
     updateL!(a.μ₀,c.f,c.λρ;perdir=a.perdir); 
     update!(b)
@@ -241,13 +239,17 @@ lowerBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,λ,i,j,N,::Val{true}) = @loop
 upperBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,λ,i,j,N,::Val{true}) = @loop r[I-δ(j,I),i] -= Φ[CIj(j,I,2)] over I ∈ slice(N,N[j],j,2)
 
 
-function updateU!(u::AbstractArray{T},ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=one(T)) where T
+function updateU!(a::Flow{D,T},ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=one(T);udf=nothing,tudf=tNow,kwargs...) where {D,T}
+    u = a.u
     wT = T(w)
-    a = inv(wT)-1
-    @loop ρu[Ii] = (a*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)*wT over Ii∈CartesianIndices(ρu)
+    aCoef = inv(wT)-1
+    # Forcing on momentum
+    @loop ρu[Ii] = (aCoef*ρu⁰[Ii] + ρu[Ii] + forcing[Ii]*dt)*wT over Ii∈CartesianIndices(ρu)
     ρu2u!(u,ρu,f,λρ)
+    # Forcing on velocity
     fill!(forcing,0)
     accelerate!(forcing,tNow,g,uBC)
+    udf!(a,udf,a.u⁰,tudf;fc=f,kwargs...) # forcing-style: writes into `forcing` (a.f), scaled by dt below
     axpy!(dt*wT, forcing, u)
 end
 
