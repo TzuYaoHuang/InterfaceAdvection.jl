@@ -119,7 +119,7 @@ upwind (i.e. this direction doesn't propagate information into `I`).
 Derivative estimated with second-order ENO (minmod-limited) method by
 [Sussman et al. (1999)](https://doi.org/10.1006/jcph.1998.6106).
 """
-function 𝛁ϕᵢ²(a,b,c,d,e,s) where {T,D}
+function 𝛁ϕᵢ²(a,b,c,d,e,s)
     dϕ⁺ = d-c
     dϕ⁻ = c-b
     
