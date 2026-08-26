@@ -1,0 +1,18 @@
+[deps]
+ImplicitGlobalGrid = "4d7a3746-15be-11ea-1130-334b0c4f5fa0"
+InterfaceAdvection = "7ddc8b3f-1127-48ac-9ed0-0fbc5309d9af"
+MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
+MPIPreferences = "3da0fdf6-3ccc-4f1b-acd9-58baa6c99267"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+WaterLily = "ed894a53-35f9-47f1-b17f-85db9237eebd"
+WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
+
+[sources]
+InterfaceAdvection = {path = ".."}
+WaterLily = {path = "../../WaterLily.jl"}
+
+[compat]
+ImplicitGlobalGrid = "0.17.1"
+MPI = "0.20"
+WriteVTK = "1.21.2"
+julia = "1.10"

@@ -24,3 +24,5 @@ LocalPreferences.toml
 # paraview
 *.vti
 *.pvd
+
+vtk_data/
