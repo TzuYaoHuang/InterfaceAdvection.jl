@@ -99,8 +99,9 @@ V0 = global_sum(@view sim.intf.f[inside(sim.intf.f)])
 
 # `save!`/`vtkWriter` are generic over `AbstractSimulation` and just call
 # `a.flow.*`/`a.intf.*` — no InterfaceAdvection-specific VTK extension needed.
+_rank(a::AbstractSimulation) = fill(Float32(me), size(a.flow.p)...)
 wr = if output
-    attrib = merge(default_attrib(), Dict("VOF" => a -> a.intf.f))
+    attrib = merge(default_attrib(), Dict("VOF" => a -> a.intf.f, "Rank" => _rank))
     vtkWriter("mpi_dambreak"; attrib, dir="vtk_data")
 else
     nothing
@@ -110,7 +111,7 @@ end
 MPI.Barrier(comm)
 t_start = MPI.Wtime()
 
-t_end, max_steps = T(3), 2000
+t_end, max_steps = T(5), 10000
 for step in 1:max_steps
     sim_step!(sim)   # TwoPhaseSimulation's own single-step method (MPFMomStep!)
 
