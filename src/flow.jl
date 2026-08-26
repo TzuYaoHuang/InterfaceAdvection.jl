@@ -124,7 +124,10 @@ function visc!(r,u,fFace,Φ,f,λμ,μ::Number,λρ;perdir=())
     # calculate the lower boundary for each momentum cell then use it to help the previous cell
     # Lower boundary of the I cell is the upper boundary of I-1 cell.
     for i∈1:D, j∈1:D
-        tagper = (j∈perdir)
+        # periodic branch needs the 2-cell-back wrap stencil, which a 1-wide MPI
+        # halo can't supply across ranks: effective_perdir excludes decomposed j
+        # (identity in serial, since nothing is ever decomposed there)
+        tagper = (j∈effective_perdir(perdir))
         # treatment for bottom boundary with BCs
         lowerBoundaryVisc!(r,u,Φ,i,j,N,fFace,λμ,μ,λρ,Val{tagper}())
         # inner cells
@@ -214,7 +217,8 @@ function advectρuu1D!(ρu, r, Φ, ρuf, uStar, uOld, fOld, ρ̄∂ⱼuⱼ, u, u
     @loop ρ̄∂ⱼuⱼ[I] = getρ(I,c̄,λρ)*(∂(d,I,u)+∂(d,I,u⁰))/2 over I∈inside(Φ)
     BCf!(ρ̄∂ⱼuⱼ;perdir)
     for i∈1:D
-        tagper = (j∈perdir)
+        # see visc! for why effective_perdir (not raw perdir) gates the periodic branch
+        tagper = (j∈effective_perdir(perdir))
         # treatment for bottom boundary with BCs
         lowerBoundaryρuu!(r,u,uStar,ρuf,Φ,fOld,δt,λρ,λ,i,j,N,Val{tagper}())
         # inner cells
@@ -265,12 +269,12 @@ end
     timeNow = sum(a.Δt)
     fill!(a.σ,0)
 
-    # From WaterLily
+    # From WaterLily; global_min syncs Δt across ranks (mirrors WaterLily.CFL)
     @inside a.σ[I] = flux_out(I,a.u)
-    Δt_Adv = inv(maximum(a.σ)+5a.ν)
+    Δt_Adv = global_min(Δt_max, inv(maximum(a.σ)+5a.ν))
 
     @inside a.σ[I] = maxTotalFlux(I,a.u)
-    Δt_cVOF = 1/2maximum(a.σ)
+    Δt_cVOF = global_min(Δt_max, 1/2maximum(a.σ))
 
     x = zeros(SVector{D,T})
     g = a.g

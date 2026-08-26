@@ -15,7 +15,7 @@ end
 @inline function applyVOF!(f::AbstractArray{T,D},α::AbstractArray{T,D},n̂::AbstractArray{T,Dv},InterfaceSDF,I) where {T,D,Dv}
     # forwardDiff cause some problem so using finite difference
     Δx = T(0.01)
-    xcen = loc(0,I)
+    xcen = loc(0,I,global_offset(Val(D),T)) # global coords, so every rank sees the same SDF
 
     sumN = zero(T)
     sumN2 = zero(T) 
@@ -39,19 +39,26 @@ end
 """
     BCVOF!(f,α,n̂;perdir)
 
-Apply boundary condition to volume fraction, intercept, and normal with Neumann or Periodic ways
+Apply boundary condition to volume fraction, intercept, and normal with Neumann or Periodic ways.
+
+Under MPI, `effective_perdir` restricts the local periodic-wrap branch to periodic
+directions NOT split across ranks (a split periodic direction wraps via halo exchange
+instead), the Neumann branch only writes at genuine domain edges (`phys_left`/`phys_right`
+are `false` at rank-internal faces), and `scalar_halo!`/`velocity_halo!` exchange the ghost
+layer for any decomposed direction. All are no-ops in serial, so behavior there is unchanged.
 """
 function BCVOF!(f,α,n̂;perdir=())
     N,D = size_u(n̂)
     for j∈1:D
-        if j in perdir
+        if j in effective_perdir(perdir)
             @loop fαn̂!(f,α,n̂, I,j,N[j]-1) over I ∈ slice(N,1,j)
             @loop fαn̂!(f,α,n̂, I,j,2) over I ∈ slice(N,N[j],j)
         else
-            @loop f[I] = f[I+δ(j,I)] over I ∈ slice(N,1,j)
-            @loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j)
+            phys_left(j)  && (@loop f[I] = f[I+δ(j,I)] over I ∈ slice(N,1,j))
+            phys_right(j) && (@loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j))
         end
     end
+    scalar_halo!(f); scalar_halo!(α); velocity_halo!(n̂)
 end
 function fαn̂!(f::AbstractArray{T,D},α,n̂, I,j,ii) where {T,D}
     f[I] = f[CIj(j,I,ii)]
@@ -64,58 +71,62 @@ end
 function BCf!(f::AbstractArray{T,D};perdir=()) where {T,D}
     N = size(f)
     for j∈1:D
-        if j in perdir
+        if j in effective_perdir(perdir)
             @loop f[I] = f[CIj(j,I,N[j]-1)] over I ∈ slice(N,1,j)
             @loop f[I] = f[CIj(j,I,2)] over I ∈ slice(N,N[j],j)
         else
-            @loop f[I] = f[I+δ(j,I)] over I ∈ slice(N,1,j)
-            @loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j)
+            phys_left(j)  && (@loop f[I] = f[I+δ(j,I)] over I ∈ slice(N,1,j))
+            phys_right(j) && (@loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j))
         end
     end
+    scalar_halo!(f)
 end
 function BCf!(d,f::AbstractArray{T,D};perdir=()) where {T,D}
     N = size(f)
     for j∈1:D
-        if j in perdir
+        if j in effective_perdir(perdir)
             @loop f[I] = f[CIj(j,I,N[j]-1)] over I ∈ slice(N,1,j)
             @loop f[I] = f[CIj(j,I,2)] over I ∈ slice(N,N[j],j)
         elseif j==d
-            @loop f[I] = f[I+2δ(j,I)] over I ∈ slice(N,1,j)
+            phys_left(j) && (@loop f[I] = f[I+2δ(j,I)] over I ∈ slice(N,1,j))
         else
-            @loop f[I] = f[I+δ(j,I)] over I ∈ slice(N,1,j)
-            @loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j)
+            phys_left(j)  && (@loop f[I] = f[I+δ(j,I)] over I ∈ slice(N,1,j))
+            phys_right(j) && (@loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j))
         end
     end
+    scalar_halo!(f)
 end
 
 function BCv!(f;perdir=())
     N,D = size_u(f)
     for d∈1:D, j∈1:D
-        if j in perdir
+        if j in effective_perdir(perdir)
             @loop f[I,d] = f[CIj(j,I,N[j]-1),d] over I ∈ slice(N,1,j)
             @loop f[I,d] = f[CIj(j,I,2),d] over I ∈ slice(N,N[j],j)
         elseif j==d
-            @loop f[I,d] = f[I+2δ(j,I),d] over I ∈ slice(N,1,j)
+            phys_left(j) && (@loop f[I,d] = f[I+2δ(j,I),d] over I ∈ slice(N,1,j))
         else
-            @loop f[I,d] = f[I+δ(j,I),d] over I ∈ slice(N,1,j)
-            @loop f[I,d] = f[I-δ(j,I),d] over I ∈ slice(N,N[j],j)
+            phys_left(j)  && (@loop f[I,d] = f[I+δ(j,I),d] over I ∈ slice(N,1,j))
+            phys_right(j) && (@loop f[I,d] = f[I-δ(j,I),d] over I ∈ slice(N,N[j],j))
         end
     end
+    velocity_halo!(f)
 end
 
 function BCv1D!(f::AbstractArray{T,D},d;perdir=()) where {T,D}
     N = size(f)
     for j∈1:D
-        if j in perdir
+        if j in effective_perdir(perdir)
             @loop f[I] = f[CIj(j,I,N[j]-1)] over I ∈ slice(N,1,j)
             @loop f[I] = f[CIj(j,I,2)] over I ∈ slice(N,N[j],j)
         elseif j==d
-            @loop f[I] = f[I+2δ(j,I)] over I ∈ slice(N,1,j)
+            phys_left(j) && (@loop f[I] = f[I+2δ(j,I)] over I ∈ slice(N,1,j))
         else
-            @loop f[I] = f[I+δ(j,I)] over I ∈ slice(N,1,j)
-            @loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j)
+            phys_left(j)  && (@loop f[I] = f[I+δ(j,I)] over I ∈ slice(N,1,j))
+            phys_right(j) && (@loop f[I] = f[I-δ(j,I)] over I ∈ slice(N,N[j],j))
         end
     end
+    scalar_halo!(f)
 end
 
 

@@ -69,7 +69,9 @@ function computeL!(L::AbstractArray{T,D},ϕ,ϕini;perdir=()) where {T,D}
     N = size(L)
     # L += ∇ϕᵢ²
     for i∈1:D
-        tagper = (i in perdir)
+        # periodic branch needs the 2-cell-back wrap (CIj), unavailable across an
+        # MPI-decomposed direction with halowidth=1; effective_perdir excludes those
+        tagper = (i in effective_perdir(perdir))
         # lower boundary cell
         lowerL!(L,ϕ,ϕini,i,N,Val{tagper}())
         # inner cell

@@ -22,7 +22,7 @@ end
 Compute potential energy of a cell given gravitational field tuple `g`.
 StatWL is static WL: The height of each index if evenly distribute the water -- the final water level if g acting in the direction.
 """
-ρgh(I::CartesianIndex{D},g,f,λρ,StatWL) where D = -getρ(I,f,λρ)*fsum((i)-> g[i]*(loc(0,I)[i]-StatWL[i]), D)
+ρgh(I::CartesianIndex{D},g,f,λρ,StatWL) where D = -getρ(I,f,λρ)*fsum((i)-> g[i]*(loc(0,I,global_offset(Val(D)))[i]-StatWL[i]), D)
 
 """
     EnsI(I::CartesianIndex,u,U=0)

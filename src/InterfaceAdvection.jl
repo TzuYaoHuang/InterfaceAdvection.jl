@@ -3,6 +3,10 @@ module InterfaceAdvection
 # some necessary function from WaterLily
 using WaterLily,Printf
 import WaterLily: @loop,div,inside,∂,inside_u,CI,CIj,slice,size_u, NoBody, check_fn
+# MPI-parallel hooks (par_mode[] dispatch): scalar_halo!, velocity_halo!, global_min,
+# global_offset etc. are already exported by WaterLily; phys_left/phys_right/effective_perdir
+# are not, so pull them in explicitly. No-ops in serial, so this changes nothing single-rank.
+import WaterLily: phys_left, phys_right, effective_perdir
 
 include("util.jl")
 
@@ -58,6 +62,11 @@ all of `WaterLily.Simulation`'s keyword arguments (e.g. `Δt`, `ν`, `g`, `U`, `
 - `T`: array element type.
 - `mem`: memory location. `Array`, `CuArray`, `ROCm` to run on CPU, NVIDIA, or
   AMD devices, respectively.
+
+Under MPI, decompose the domain first with `local_dims, rank, comm =
+WaterLily.init_waterlily_mpi(global_dims; perdir)` and pass the returned
+`local_dims` as `dims` here (`WaterLily.@distributed` only rewrites literal
+`Simulation(...)` calls, so it can't wrap `TwoPhaseSimulation` directly).
 
 See: `WaterLily.Simulation`.
 """
