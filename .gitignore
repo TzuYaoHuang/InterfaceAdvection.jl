@@ -23,4 +23,5 @@ LocalPreferences.toml
 
 # paraview
 *.vti
+*.pvti
 *.pvd
