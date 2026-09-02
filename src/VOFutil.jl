@@ -183,7 +183,9 @@ k_interp(α) = clamp(kern₀(2α-1),0,1)
 
 Calculate the viscosity corresponding to the term ∂ⱼuᵢ @ either `I-0.5i-0.5j` or `I-1i`.
 The function return the linear interpolation at cell center (when `i==j`) or cell vertex (when `i≠j`).
-The calculated viscosity is limited with the majority fluid's kinematic viscosity applied to interpolation.
+The calculated viscosity is the minimum of a direct linear interpolation of the dynamic viscosity and a
+kinematic-viscosity-limited estimate, which smoothly switches (via `k_interp`, a clamped WaterLily kernel)
+between the two fluids' kinematic viscosities to avoid the sharp jump a hard threshold would introduce.
 The dynamic viscosity is then recovered using the minimal density of the cells who are going to use the stress flux.
 """
 @inline @fastmath function getμ(i,j,I,fFace::AbstractArray{T},λμ,μ,λρ) where T
