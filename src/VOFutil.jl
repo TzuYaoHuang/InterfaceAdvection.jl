@@ -175,19 +175,24 @@ Linearly interpolate density at either `I` or `I-0.5d`.
 @inline @fastmath getρ(Ii::CartesianIndex{Dv},f::AbstractArray{T,D},λρ) where {T,D,Dv} = getρ(last(Ii.I),CI(Base.front(Ii.I)),f,λρ)
 @inline @fastmath getρ(d,I,f,λρ) = linInterpProp(ϕ(d,I,f),λρ)
 
+import WaterLily: kern₀
+k_interp(α) = clamp(kern₀(2α-1),0,1)
+
 """
     getμ(i,j,I,fFace,λμ,μ,λρ)
 
 Calculate the viscosity corresponding to the term ∂ⱼuᵢ @ either `I-0.5i-0.5j` or `I-1i`.
 The function return the linear interpolation at cell center (when `i==j`) or cell vertex (when `i≠j`).
-The calculated viscosity is limited with the majority fluid's kinematic viscosity applied to interpolation.
+The calculated viscosity is the minimum of a direct linear interpolation of the dynamic viscosity and a
+kinematic-viscosity-limited estimate, which smoothly switches (via `k_interp`, a clamped WaterLily kernel)
+between the two fluids' kinematic viscosities to avoid the sharp jump a hard threshold would introduce.
 The dynamic viscosity is then recovered using the minimal density of the cells who are going to use the stress flux.
 """
 @inline @fastmath function getμ(i,j,I,fFace::AbstractArray{T},λμ,μ,λρ) where T
     f1,f2,f3,f4 = fFace[I-δ(j,I),i],fFace[I,i],fFace[I-δ(i,I),j],fFace[I,j]
     s = (f1+f2+f3+f4)/4
     f_ρmin = λρ < 1 ? min(f1,f2,f3,f4) : max(f1,f2,f3,f4)
-    return μ*min(linInterpProp(s,λμ), ifelse(s>0.5,one(T),λμ/λρ)*linInterpProp(f_ρmin,λρ))
+    return μ*min(linInterpProp(s,λμ), linInterpProp(k_interp(s),λμ/λρ)*linInterpProp(f_ρmin,λρ))
 end
 
 """
