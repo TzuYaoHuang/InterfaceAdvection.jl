@@ -261,25 +261,33 @@ function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
 end
 
 # NOTE: Do not use @fastmath for CFL. It has problem dealing with maximum function in GPU.
-@inline function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=one(T),safetyMargin=T(0.8)) where {D,T}
+@inline function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=one(T),safetyMargin=T(0.8),CFL=T(0.5)) where {D,T}
     timeNow = sum(a.Δt)
     fill!(a.σ,0)
 
-    # From WaterLily
-    @inside a.σ[I] = flux_out(I,a.u)
-    Δt_Adv = inv(maximum(a.σ)+5a.ν)
-
+    # cVOF CFL
     @inside a.σ[I] = maxTotalFlux(I,a.u)
     Δt_cVOF = 1/2maximum(a.σ)
 
-    x = zeros(SVector{D,T})
-    g = a.g
-    Δt_Grav = isnothing(g) ? Δt_max : grav_dt(g, x, timeNow, Val(D), Δt_max, T)
+    # Convective CFL
+    @inside a.σ[I] = flux_out(I,a.u)
+    Conv = maximum(a.σ)
 
-    Δt_Visc = isnothing(c.μ) ? Δt_max : 1/(2D*c.μ*max(1,c.λμ/c.λρ))
-    Δt_SurfT = isnothing(c.η) ? Δt_max : sqrt((1+c.λρ)/(T(8π)*c.η))  # 8 from kelli's code
+    # Viscous
+    Visc = 2D*a.ν*max(1,c.λμ/c.λρ)
 
-    return safetyMargin*min(Δt_cVOF,Δt_Adv,Δt_Grav,Δt_Visc,Δt_SurfT)
+    # Graviational
+    fill!(a.f,0); accelerate!(a.f,timeNow,a.g,a.uBC)
+    gvec2absg(I,gvec) = (z = zero(T); for i = 1:D z+=abs(gvec[I,i]) end; sqrt(z))
+    @inside a.σ[I] = gvec2absg(I,a.f)
+    Grav = maximum(a.σ)
+
+    # Surface tension
+    STen = isnothing(c.η) ? zero(T) : sqrt(T(8π)*c.η/min(one(T),c.λρ)) # 8 from kelli's code
+
+    Δt_General = 2/(Conv+Visc + sqrt((Conv+Visc)^2 + 4(Grav^2+STen^2)))
+
+    return safetyMargin*min(Δt_cVOF, CFL*Δt_General)
 end
 
 @fastmath @inline function maxTotalFlux(I::CartesianIndex{D},u) where D
