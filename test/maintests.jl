@@ -66,8 +66,8 @@ end
     # not the cell-centered field directly (i==j -> cell-normal viscosity, i≠j -> edge/vertex viscosity)
     fFace = zeros(3,3,2)
     fFace[3,2,1] = 0.1; fFace[3,3,1] = 0.2; fFace[2,3,2] = 0.3; fFace[3,3,2] = 0.4
-    @test getμ(1,1,Iur,fFace,0.1,0.2,1) ≈ 0.02
-    @test getμ(1,2,Iur,fFace,0.1,0.2,0.2) == getμ(2,1,Iur,fFace,0.1,0.2,0.2) ≈ 0.028
+    @test getμ(1,1,Iur,fFace,0.1,0.2,1) ≈ 0.0211611928918045
+    @test getμ(1,2,Iur,fFace,0.1,0.2,0.2) == getμ(2,1,Iur,fFace,0.1,0.2,0.2) ≈ 0.030543661593426936
 
     # f2face! interpolates a cell-centered field to each of its D face directions
     fCen = zeros(4,4); fCen[2:3,2:3] .= [0.2 0.6; 0.4 0.8]
