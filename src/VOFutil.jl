@@ -175,6 +175,9 @@ Linearly interpolate density at either `I` or `I-0.5d`.
 @inline @fastmath getρ(Ii::CartesianIndex{Dv},f::AbstractArray{T,D},λρ) where {T,D,Dv} = getρ(last(Ii.I),CI(Base.front(Ii.I)),f,λρ)
 @inline @fastmath getρ(d,I,f,λρ) = linInterpProp(ϕ(d,I,f),λρ)
 
+import WaterLily: kern₀
+k_interp(α) = clamp(kern₀(2α-1),0,1)
+
 """
     getμ(i,j,I,fFace,λμ,μ,λρ)
 
@@ -187,7 +190,7 @@ The dynamic viscosity is then recovered using the minimal density of the cells w
     f1,f2,f3,f4 = fFace[I-δ(j,I),i],fFace[I,i],fFace[I-δ(i,I),j],fFace[I,j]
     s = (f1+f2+f3+f4)/4
     f_ρmin = λρ < 1 ? min(f1,f2,f3,f4) : max(f1,f2,f3,f4)
-    return μ*min(linInterpProp(s,λμ), ifelse(s>0.5,one(T),λμ/λρ)*linInterpProp(f_ρmin,λρ))
+    return μ*min(linInterpProp(s,λμ), linInterpProp(k_interp(s),λμ/λρ)*linInterpProp(f_ρmin,λρ))
 end
 
 """
