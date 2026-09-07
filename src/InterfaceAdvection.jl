@@ -76,6 +76,7 @@ mutable struct TwoPhaseSimulation <: AbstractSimulation
 
         # multipahse part
         intf = cVOF(dims;mem,T,InterfaceSDF,μ=flow.ν,λμ,λρ,η,normalScheme,perdir=flow.perdir)
+        copyto!(intf.β₀,flow.μ₀) # copy the zeroth-moment
 
         # correct wrong CFL
         flow.Δt[end] = min(last(flow.Δt),MPCFL(flow,intf))
@@ -94,11 +95,10 @@ export LevelSet, redistaning!
 # overload for simStep
 # solutoin from https://discourse.julialang.org/t/functions-from-different-modules-with-the-same-name/61505/2
 import WaterLily: sim_step!, sim_info
-# TODO: support BDIM body
 # `sim_step!(sim,t_end;...)` falls through to WaterLily's generic AbstractSimulation loop,
 # which drives this per-step method and `sim_info` below.
 function sim_step!(sim::TwoPhaseSimulation;remeasure=false,udf=nothing,kwargs...)
-    remeasure && measure!(sim)
+    remeasure && (measure!(sim); copyto!(sim.intf.β₀,sim.flow.μ₀)) # copy the zeroth-moment
     MPFMomStep!(sim.flow,sim.pois,sim.intf,sim.body;udf,kwargs...)
 end
 function sim_info(sim::TwoPhaseSimulation)
