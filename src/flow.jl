@@ -1,4 +1,4 @@
-import WaterLily: accelerate!, median, update!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ, udf!
+import WaterLily: accelerate!, median, update!, scale_u!, exitBC!,perBC!,residual!,mult, flux_out, vanLeer, L∞, ϕ, udf!, μddn
 import LinearAlgebra: ⋅, rmul!, axpy!
 
 # I need to re-define the flux limiter or else the TVD property cannot conserve
@@ -69,8 +69,7 @@ end
     u2ρu!(c.ρu,a.u⁰,c.f⁰,c.λρ); BC!(c.ρu,a.uBC,a.exitBC,a.perdir)
     advectfq!(a, c, c.f⁰, a.u⁰, a.u, a.u, δt)
 
-    # TODO: include measure
-    fill!(a.μ₀,1)
+    copyto!(a.μ₀,c.β₀)
     @. c.f⁰ = (c.f⁰+c.f)/2
     viscSurfTenρu!(a.f,a.u,a.σ,c.f⁰,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
@@ -90,10 +89,7 @@ end
     u2ρu!(c.ρu,a.u⁰,c.f,c.λρ); BC!(c.ρu,a.uBC,a.exitBC,a.perdir)
     advectfq!(a, c, c.f, a.u, a.u, a.u⁰, δt)
     
-    # TODO: include measure
-    fill!(a.μ₀,1)
-    # TODO: viscous term and surface tension term should be evaluated 
-    # at the end of time step to avoid divide by wrong ρ
+    copyto!(a.μ₀,c.β₀)
     viscSurfTenρu!(a.f,a.u,a.σ,c.f,c.α,c.n̂,c.fᶠ,c.λμ,c.μ,c.λρ,c.η;perdir=a.perdir)
     u2ρu!(c.n̂,a.u⁰,c.f,c.λρ) # steal n̂ as original momentum
     a.u⁰ .= a.u  # get u at t (1/2) for udf
@@ -108,6 +104,7 @@ end
 
 # Forcing with the unit of ρu instead of u
 # This is the place for ρu forcing that does not need directional split
+# Note: viscous term and surface tension term should be evaluated at the end of time step to avoid divide by wrong ρ
 function viscSurfTenρu!(r,u,Φ,f,α,n̂,fbuffer,λμ,μ,λρ,η;perdir=())
     fill!(r,0)
     visc!(r,u,n̂,Φ,f,λμ,μ,λρ;perdir)
@@ -251,6 +248,17 @@ function updateU!(a::Flow{D,T},ρu,ρu⁰,forcing,dt,f,λρ,tNow,g,uBC,w=one(T);
     accelerate!(forcing,tNow,g,uBC)
     udf!(a,udf,a.u⁰,tudf;fc=f,kwargs...) # forcing-style: writes into `forcing` (a.f), scaled by dt below
     axpy!(dt*wT, forcing, u)
+    velBDIM!(a)
+end
+
+"""
+    velBDIM!(a::LilyFlow)
+
+BDIM based on a calculated flow field
+"""
+function velBDIM!(a)
+    @loop a.f[Ii] = a.u[Ii] - a.V[Ii] over Ii ∈ CartesianIndices(a.f)
+    @loop a.u[Ii] = μddn(Ii, a.μ₁, a.f) + a.V[Ii] + a.μ₀[Ii] * a.f[Ii] over Ii ∈ inside_u(size(a.p))
 end
 
 function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
