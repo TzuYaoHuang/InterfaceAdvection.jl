@@ -269,7 +269,7 @@ function updateL!(μ₀,f::AbstractArray{T,D},λρ;perdir=()) where {T,D}
 end
 
 # NOTE: Do not use @fastmath for CFL. It has problem dealing with maximum function in GPU.
-@inline function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=5one(T),safetyMargin=T(0.8)) where {D,T}
+@inline function MPCFL(a::Flow{D,T},c::cVOF; Δt_max=10one(T),safetyMargin=T(0.8)) where {D,T}
     timeNow = sum(a.Δt)
     fill!(a.σ,0)
 
