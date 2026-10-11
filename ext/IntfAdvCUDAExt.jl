@@ -1,10 +1,6 @@
 module IntfAdvCUDAExt
 
-if isdefined(Base, :get_extension)
-    using CUDA
-else
-    using ..CUDA
-end
+using CUDA
 
 using Printf
 import WaterLily: div,δ
