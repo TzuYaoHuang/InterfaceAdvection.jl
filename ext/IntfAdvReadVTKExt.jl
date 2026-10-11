@@ -1,10 +1,6 @@
 module IntfAdvReadVTKExt
 
-if isdefined(Base, :get_extension)
-    using ReadVTK
-else
-    using ..ReadVTK
-end
+using ReadVTK
 
 using WaterLily
 import InterfaceAdvection: TwoPhaseSimulation, load!

@@ -1,10 +1,6 @@
 module IntfAdvAMDGPUExt
 
-if isdefined(Base, :get_extension)
-    using AMDGPU
-else
-    using ..AMDGPU
-end
+using AMDGPU
 
 using Printf
 
