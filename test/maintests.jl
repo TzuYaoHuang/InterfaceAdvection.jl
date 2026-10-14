@@ -319,7 +319,7 @@ end
 end
 
 @testset "metrics.jl" begin
-    import InterfaceAdvection: ρkeI, ρuI, ρgh, EnsI
+    import InterfaceAdvection: ρkeI, ρuI, ρgh, EnsI, 𝛁f₂
 
     u = zeros(4,4,2)
     u[2,2,1] = 1; u[3,2,1] = 2; u[2,2,2] = 3; u[2,3,2] = 4
@@ -345,4 +345,21 @@ end
     ω3[2,2,2,2]=1; ω3[2,2,3,2]=2; ω3[3,2,2,2]=3; ω3[3,2,3,2]=4
     ω3[2,2,2,3]=1; ω3[3,2,2,3]=2; ω3[2,3,2,3]=3; ω3[3,3,2,3]=4
     @test EnsI(I3,ω3) ≈ 11.25
+
+    # 𝛁f₂ is the norm of the central-difference gradient
+    f = zeros(4,4); f[3,2] = 0.6; f[2,3] = 0.8
+    @test 𝛁f₂(I,f) ≈ 0.5 # √(0.3²+0.4²)
+    f3 = zeros(4,4,4); f3[3,2,2] = 0.2; f3[2,3,2] = 0.4; f3[2,2,3] = 0.4
+    @test 𝛁f₂(I3,f3) ≈ 0.3 # √(0.1²+0.2²+0.2²)
+
+    # summed over the domain, 𝛁f₂ estimates the interface area
+    function intfArea(N,sdf)
+        local f = zeros(N.+2); α = similar(f); n̂ = zeros(N.+2...,length(N))
+        applyVOF!(f,α,n̂,sdf); BCVOF!(f,α,n̂)
+        return sum(I->𝛁f₂(I,f), inside(f))
+    end
+    @test intfArea((32,32),x->x[2]-16.3) ≈ 32
+    @test intfArea((16,16,16),x->x[3]-7.6) ≈ 256
+    @test intfArea((32,32),x->√sum(abs2,x.-16)-8) ≈ 2π*8 rtol=0.02
+    @test intfArea((16,16,16),x->√sum(abs2,x.-8)-4) ≈ 4π*4^2 rtol=0.025
 end

@@ -44,3 +44,13 @@ This function take multiphase into account so as the staggered arragement.
 ρuI(i,I::CartesianIndex{D},u,f,λρ,U=fSV(zero,D)) where D = begin
     0.5(u[I,i]+u[I+δ(i,I),i]-2U[i])*getρ(I,f,λρ)
 end
+
+"""
+    𝛁f₂(I::CartesianIndex,f)
+
+Compute ``∥𝛁f∥₂`` at center of cell `I` with central differences.
+Summing it over `inside(f)` estimates the interface area.
+"""
+𝛁f₂(I,f::AbstractArray{T,D}) where {T,D} = √fsum(D) do i
+    ((f[I+δ(i,I)]-f[I-δ(i,I)])/2)^2
+end
