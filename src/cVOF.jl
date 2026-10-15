@@ -32,6 +32,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}, Nf}
 
     # Originally for interface-aware Flux limiter but now a vector buffer
     dρ :: Vf # face-center density change indicator
+    β₀ :: Vf # temporary space for μ₀ before go into pressure (μ₀/ρ)
 
     # physical properties
     μ  :: Union{T,Nothing}   # store dynamcs viscosity of dark fluid (corresponding to ν)
@@ -72,6 +73,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}, Nf}
         # Yet another vecotr variable for starage purpose
         # originally for density ratio
         dρ = ones(T,Nv) |> mem
+        β₀ = ones(T,Nv) |> mem
 
         # correct η
         ηc = ifelse(η==0,nothing,η)
@@ -82,7 +84,7 @@ struct cVOF{D, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}, Nf}
         new{D,T,typeof(f),typeof(n̂),typeof(normalScheme)}(
             f, f⁰, α, n̂, normalScheme, fᶠ, c̄,
             ρu, ρuf,
-            dρ,
+            dρ, β₀,
             μc, λρ, λμ, ηc,
             perdir
         )
